@@ -11,19 +11,29 @@ const app = express();
 const port = Number(process.env.PORT || 3000);
 
 // =====================================================
-// GEMINI SETUP
+// AI SETUP
 // =====================================================
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY
-});
+const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
+const groqApiKey = process.env.GROQ_API_KEY?.trim();
+
+const ai = geminiApiKey
+  ? new GoogleGenAI({
+      apiKey: geminiApiKey
+    })
+  : null;
 
 // =====================================================
-// EXPRESS SETUP
+// EXPRESS
 // =====================================================
 
 app.use(express.json({ limit: "32kb" }));
-app.use(express.static(path.join(__dirname, "public")));
+
+app.use(
+  express.static(
+    path.join(__dirname, "public")
+  )
+);
 
 // =====================================================
 // ALLOWED VALUES
@@ -71,17 +81,32 @@ const JEWELLERY_ITEMS = new Set([
 // =====================================================
 
 function cleanArray(value, allowedSet) {
-  if (!Array.isArray(value)) return [];
+  if (!Array.isArray(value)) {
+    return [];
+  }
 
   return [
     ...new Set(
       value.filter(
-        (v) =>
-          typeof v === "string" &&
-          allowedSet.has(v)
+        (item) =>
+          typeof item === "string" &&
+          allowedSet.has(item)
       )
     )
   ];
+}
+
+function cleanReview(text) {
+  if (!text) {
+    return "";
+  }
+
+  return String(text)
+    .replace(/^```(?:text)?/i, "")
+    .replace(/```$/i, "")
+    .replace(/^["']|["']$/g, "")
+    .replace(/^Review:\s*/i, "")
+    .trim();
 }
 
 function countWords(text) {
@@ -92,23 +117,10 @@ function countWords(text) {
     .length;
 }
 
-function cleanReview(text) {
-  return String(text || "")
-    .trim()
-    .replace(/^```[\w-]*\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .replace(/^["']|["']$/g, "")
-    .replace(/^Review:\s*/i, "")
-    .trim();
-}
+function validWordCount(text) {
+  const count = countWords(text);
 
-function isValidReview(review) {
-  const wordCount = countWords(review);
-
-  return (
-    wordCount >= 55 &&
-    wordCount <= 90
-  );
+  return count >= 55 && count <= 90;
 }
 
 // =====================================================
@@ -127,27 +139,42 @@ function validatePayload(body) {
   } = body || {};
 
   if (
-    !ALLOWED_RATING.has(Number(productQualityRating)) ||
-    !ALLOWED_RATING.has(Number(designVarietyRating)) ||
-    !ALLOWED_RATING.has(Number(customerServiceRating))
+    !ALLOWED_RATING.has(
+      Number(productQualityRating)
+    ) ||
+    !ALLOWED_RATING.has(
+      Number(designVarietyRating)
+    ) ||
+    !ALLOWED_RATING.has(
+      Number(customerServiceRating)
+    )
   ) {
     throw new Error(
-      "Please provide valid 1–5 ratings for quality, variety and service."
+      "Please provide valid 1–5 ratings."
     );
   }
 
   if (!ALLOWED_LANGUAGES.has(language)) {
-    throw new Error("Invalid language.");
+    throw new Error(
+      "Invalid language."
+    );
   }
 
   if (!ALLOWED_GENDERS.has(gender)) {
-    throw new Error("Invalid review voice.");
+    throw new Error(
+      "Invalid review voice."
+    );
   }
 
   return {
-    productQualityRating: Number(productQualityRating),
-    designVarietyRating: Number(designVarietyRating),
-    customerServiceRating: Number(customerServiceRating),
+    productQualityRating:
+      Number(productQualityRating),
+
+    designVarietyRating:
+      Number(designVarietyRating),
+
+    customerServiceRating:
+      Number(customerServiceRating),
 
     quickFeedback:
       Array.isArray(quickFeedback)
@@ -155,17 +182,19 @@ function validatePayload(body) {
             ...new Set(
               quickFeedback
                 .filter(
-                  (x) => typeof x === "string"
+                  (x) =>
+                    typeof x === "string"
                 )
                 .slice(0, 8)
             )
           ]
         : [],
 
-    jewelleryItems: cleanArray(
-      jewelleryItems,
-      JEWELLERY_ITEMS
-    ),
+    jewelleryItems:
+      cleanArray(
+        jewelleryItems,
+        JEWELLERY_ITEMS
+      ),
 
     language,
     gender
@@ -176,89 +205,134 @@ function validatePayload(body) {
 // PROMPT
 // =====================================================
 
-function buildPrompt(data) {
+function createPrompt(data) {
   return `
-Write ONE natural customer review paragraph for the jewellery showroom "Neeraj Jewellers" in Dehradun.
+Write a natural customer review for:
 
-CUSTOMER FEEDBACK:
-- Product quality rating: ${data.productQualityRating}/5
-- Design variety rating: ${data.designVarietyRating}/5
-- Customer service rating: ${data.customerServiceRating}/5
-- Quick feedback: ${
-    data.quickFeedback.length
-      ? data.quickFeedback.join(", ")
-      : "No specific feedback selected"
-  }
-- Jewellery explored/purchased: ${
-    data.jewelleryItems.length
-      ? data.jewelleryItems.join(", ")
-      : "Not specified"
-  }
+Neeraj Jewellers
+Dehradun
+Jewellery Showroom
 
-LANGUAGE:
+CUSTOMER INFORMATION:
+
+Product Quality Rating:
+${data.productQualityRating}/5
+
+Design Variety Rating:
+${data.designVarietyRating}/5
+
+Customer Service Rating:
+${data.customerServiceRating}/5
+
+Quick Feedback:
+${
+  data.quickFeedback.length
+    ? data.quickFeedback.join(", ")
+    : "No specific feedback"
+}
+
+Jewellery Explored/Purchased:
+${
+  data.jewelleryItems.length
+    ? data.jewelleryItems.join(", ")
+    : "Not specified"
+}
+
+Language:
 ${data.language}
 
-CUSTOMER VOICE:
+Customer Voice:
 ${data.gender}
 
-SHOWROOM:
-- Name: Neeraj Jewellers
-- Location: Dehradun
-- Category: Jewellery Showroom
-- Products include gold jewellery, silver jewellery and 1 gram gold-plated jewellery.
+AVAILABLE PRODUCTS:
 
-STRICT RULES:
+Gold Rings
+Mangalsutra
+Gold Necklace Sets
+Gold Chains
+Gold Bracelets
+Gold Bangles
+Gold Kade
+Gold Earrings
+Jhumkas
+Nose Pins
+Nose Rings
+Nath
+Gold Pendants
+Silver Payal
+Silver Anklets
+Silver Toe Rings
+Silver Chains
+Silver Bracelets
+Silver Kade
+1 Gram Gold Plated Jewellery
+Silver Jewellery
 
-1. Write between 55 and 90 words.
-2. Write approximately 70 words.
-3. First-person customer voice.
-4. Sound like a genuine Indian customer.
-5. Make the wording natural, not robotic.
-6. Do not invent prices, discounts, staff names or specific offers.
-7. Do not make claims that were not provided.
-8. No hashtags.
-9. No quotation marks.
-10. No headings.
-11. No bullet points.
-12. Do not mention AI.
-13. Return ONLY the review paragraph.
+STRICT REQUIREMENTS:
 
-LANGUAGE RULES:
+- Write exactly ONE paragraph.
+- Write between 55 and 90 words.
+- Aim for approximately 70 words.
+- Write in first-person customer voice.
+- Sound like a real Indian customer.
+- Keep the review natural and believable.
+- Do not sound like an advertisement.
+- Do not invent prices.
+- Do not invent discounts.
+- Do not invent staff names.
+- Do not invent specific offers.
+- Do not mention AI.
+- Do not use hashtags.
+- Do not use quotation marks.
+- Do not use bullet points.
+- Do not add a heading.
+- Return ONLY the review.
 
-If language is English:
+LANGUAGE:
+
+English:
 Use natural Indian English.
 
-If language is Hinglish:
-Naturally mix Hindi and English using Roman Hindi.
+Hinglish:
+Use natural Roman Hindi mixed with English.
 
-If language is Hindi:
-Use natural Hindi in Devanagari script.
+Hindi:
+Use natural Hindi in Devanagari.
 
-VOICE RULE:
+VOICE:
 
-If customer voice is Male:
-Use natural wording suitable for a male customer.
+Male:
+Natural wording from a male customer.
 
-If customer voice is Female:
-Use natural wording suitable for a female customer.
+Female:
+Natural wording from a female customer.
 
 IMPORTANT:
-The final answer MUST contain 55–90 words.
-Aim for around 70 words.
-Return ONLY the review.
+The review MUST be between 55 and 90 words.
+Target approximately 70 words.
 `;
 }
 
 // =====================================================
-// GEMINI GENERATOR
+// GEMINI
 // =====================================================
 
-async function generateWithGemini(prompt) {
-  if (!process.env.GEMINI_API_KEY) {
+async function generateGemini(prompt) {
+  if (!geminiApiKey) {
     throw new Error(
-      "GEMINI_API_KEY is missing."
+      "GEMINI_API_KEY is missing in Render Environment Variables."
     );
   }
+
+  if (!ai) {
+    throw new Error(
+      "Gemini client was not initialized."
+    );
+  }
+
+  console.log(
+    "Calling Gemini..."
+  );
 
   const response =
     await ai.models.generateContent({
@@ -266,7 +340,12 @@ async function generateWithGemini(prompt) {
       contents: prompt
     });
 
-  const text = response?.text;
+  const text =
+    response?.text;
+
+  console.log(
+    "Gemini raw response received."
+  );
 
   if (
     !text ||
@@ -282,56 +361,72 @@ async function generateWithGemini(prompt) {
 }
 
 // =====================================================
-// GROQ GENERATOR
+// GROQ
 // =====================================================
 
-async function generateWithGroq(prompt) {
-  if (!process.env.GROQ_API_KEY) {
+async function generateGroq(prompt) {
+  if (!groqApiKey) {
     throw new Error(
-      "GROQ_API_KEY is missing."
+      "GROQ_API_KEY is missing in Render Environment Variables."
     );
   }
 
-  const response = await fetch(
-    "https://api.groq.com/openai/v1/chat/completions",
-    {
-      method: "POST",
-
-      headers: {
-        Authorization:
-          `Bearer ${process.env.GROQ_API_KEY}`,
-        "Content-Type":
-          "application/json"
-      },
-
-      body: JSON.stringify({
-        model: "openai/gpt-oss-20b",
-
-        messages: [
-          {
-            role: "system",
-            content:
-              "Write natural Indian customer reviews. Follow the requested language and word count exactly."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-
-        temperature: 0.7,
-        max_tokens: 250
-      })
-    }
+  console.log(
+    "Calling Groq..."
   );
 
-  const data =
-    await response.json();
+  const response =
+    await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+
+        headers: {
+          Authorization:
+            `Bearer ${groqApiKey}`,
+
+          "Content-Type":
+            "application/json"
+        },
+
+        body: JSON.stringify({
+          model:
+            "openai/gpt-oss-20b",
+
+          messages: [
+            {
+              role: "system",
+              content:
+                "You write natural Indian customer reviews. Follow the requested language and word count exactly."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+
+          temperature: 0.7,
+
+          max_completion_tokens: 300
+        })
+      }
+    );
+
+  let data;
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    throw new Error(
+      `Groq returned invalid JSON. HTTP ${response.status}`
+    );
+  }
 
   if (!response.ok) {
     throw new Error(
       data?.error?.message ||
-      `Groq request failed with status ${response.status}`
+      `Groq API error. HTTP ${response.status}`
     );
   }
 
@@ -355,82 +450,100 @@ async function generateWithGroq(prompt) {
 // RETRY PROMPT
 // =====================================================
 
-function buildRetryPrompt(originalPrompt, previousReview) {
-  const previousWordCount =
-    countWords(previousReview);
-
+function createRetryPrompt(
+  originalPrompt,
+  previousReview
+) {
   return `
 ${originalPrompt}
 
-VERY IMPORTANT:
+YOUR PREVIOUS RESPONSE WAS:
 
-The previous generated review had ${previousWordCount} words.
-
-Previous review:
 ${previousReview}
+
+The previous response contained:
+${countWords(previousReview)} words.
 
 Generate a completely NEW review.
 
-FINAL REQUIREMENT:
-- Minimum: 55 words
-- Maximum: 90 words
-- Target: approximately 70 words
-- ONE paragraph only
-- Return ONLY the review
-- Do not explain anything
-- Do not mention the word count
+FINAL RULE:
+The new review MUST contain 55 to 90 words.
+
+Aim for 70 words.
+
+Return ONLY the review paragraph.
+Do not explain anything.
+Do not mention word count.
 `;
 }
 
 // =====================================================
-// GENERATE VALID REVIEW
+// PROVIDER GENERATION
+// =====================================================
+
+async function generateFromProvider(
+  provider,
+  prompt
+) {
+  if (provider === "gemini") {
+    return await generateGemini(
+      prompt
+    );
+  }
+
+  return await generateGroq(
+    prompt
+  );
+}
+
+// =====================================================
+// GENERATE + RETRY
 // =====================================================
 
 async function generateValidReview(
-  prompt,
-  provider
+  provider,
+  prompt
 ) {
-  let review = "";
+  // First attempt
+  let review =
+    await generateFromProvider(
+      provider,
+      prompt
+    );
 
-  if (provider === "gemini") {
-    review =
-      await generateWithGemini(prompt);
-  } else {
-    review =
-      await generateWithGroq(prompt);
-  }
+  console.log(
+    `${provider} first response: ${countWords(review)} words`
+  );
 
-  // First attempt is already valid
-  if (isValidReview(review)) {
+  // Already valid
+  if (validWordCount(review)) {
     return review;
   }
 
+  // Retry
   console.log(
-    `${provider} generated ${countWords(review)} words. Retrying...`
+    `${provider} response outside 55-90 words. Retrying...`
   );
 
-  // Retry same provider
   const retryPrompt =
-    buildRetryPrompt(
+    createRetryPrompt(
       prompt,
       review
     );
 
-  if (provider === "gemini") {
-    review =
-      await generateWithGemini(
-        retryPrompt
-      );
-  } else {
-    review =
-      await generateWithGroq(
-        retryPrompt
-      );
-  }
+  review =
+    await generateFromProvider(
+      provider,
+      retryPrompt
+    );
 
-  if (!isValidReview(review)) {
+  console.log(
+    `${provider} retry response: ${countWords(review)} words`
+  );
+
+  if (!validWordCount(review)) {
     throw new Error(
-      `${provider} retry generated ${countWords(review)} words.`
+      `${provider} generated ${countWords(review)} words after retry.`
     );
   }
 
@@ -446,107 +559,137 @@ app.post(
   async (req, res) => {
     try {
       const data =
-        validatePayload(req.body);
+        validatePayload(
+          req.body
+        );
 
       const prompt =
-        buildPrompt(data);
+        createPrompt(data);
 
       let review = "";
       let provider = "";
 
+      let geminiError = null;
+      let groqError = null;
+
       // =================================================
-      // FIRST: GEMINI
+      // TRY GEMINI
       // =================================================
 
       try {
         console.log(
-          "Trying Gemini..."
+          "=============================="
+        );
+
+        console.log(
+          "TRYING GEMINI"
+        );
+
+        console.log(
+          "=============================="
         );
 
         review =
           await generateValidReview(
-            prompt,
-            "gemini"
+            "gemini",
+            prompt
           );
 
-        provider = "gemini";
+        provider =
+          "Gemini";
 
-        console.log(
-          `Gemini success: ${countWords(review)} words`
-        );
-
-      } catch (geminiError) {
+      } catch (error) {
+        geminiError =
+          error?.message ||
+          String(error);
 
         console.error(
-          "Gemini failed:",
-          geminiError.message
+          "GEMINI ERROR:",
+          error
         );
 
         // ===============================================
-        // SECOND: GROQ FALLBACK
+        // TRY GROQ
         // ===============================================
 
         try {
           console.log(
-            "Switching to Groq..."
+            "=============================="
+          );
+
+          console.log(
+            "SWITCHING TO GROQ"
+          );
+
+          console.log(
+            "=============================="
           );
 
           review =
             await generateValidReview(
-              prompt,
-              "groq"
+              "groq",
+              prompt
             );
 
-          provider = "groq";
+          provider =
+            "Groq";
 
-          console.log(
-            `Groq success: ${countWords(review)} words`
-          );
-
-        } catch (groqError) {
+        } catch (error2) {
+          groqError =
+            error2?.message ||
+            String(error2);
 
           console.error(
-            "Groq failed:",
-            groqError.message
+            "GROQ ERROR:",
+            error2
           );
-
-          return res.status(502).json({
-            error:
-              "Both AI services failed. Please try again.",
-            details: {
-              gemini:
-                geminiError.message,
-              groq:
-                groqError.message
-            }
-          });
         }
       }
 
       // =================================================
-      // FINAL SAFETY CHECK
+      // BOTH FAILED
+      // =================================================
+
+      if (!review) {
+        return res.status(502).json({
+          success: false,
+
+          error:
+            "Both AI services failed.",
+
+          geminiError,
+
+          groqError
+        });
+      }
+
+      // =================================================
+      // FINAL CLEAN
       // =================================================
 
       review =
         cleanReview(review);
 
-      if (!review) {
-        return res.status(502).json({
-          error:
-            "AI returned an empty review. Please try again."
-        });
-      }
-
       const wordCount =
         countWords(review);
+
+      // =================================================
+      // FINAL WORD CHECK
+      // =================================================
 
       if (
         wordCount < 55 ||
         wordCount > 90
       ) {
         return res.status(502).json({
+          success: false,
+
           error:
-            `Generated review contains ${wordCount} words. Required range is 55–90 words.`
+            `AI generated ${wordCount} words. Required: 55–90 words.`,
+
+          provider,
+
+          review
         });
       }
 
@@ -554,10 +697,17 @@ app.post(
       // SUCCESS
       // =================================================
 
+      console.log(
+        `SUCCESS: ${provider} - ${wordCount} words`
+      );
+
       return res.json({
         success: true,
+
         review,
+
         wordCount,
+
         provider,
 
         googleReviewUrl:
@@ -566,17 +716,17 @@ app.post(
       });
 
     } catch (error) {
-
       console.error(
-        "Generate review error:",
+        "API ERROR:",
         error
       );
 
       return res.status(400).json({
         success: false,
+
         error:
           error?.message ||
-          "Unable to generate the review."
+          "Unable to generate review."
       });
     }
   }
@@ -591,6 +741,13 @@ app.get(
   (_req, res) => {
     res.json({
       ok: true,
+
+      geminiConfigured:
+        Boolean(geminiApiKey),
+
+      groqConfigured:
+        Boolean(groqApiKey),
+
       service:
         "Neeraj Jewellers Review Generator"
     });
@@ -605,7 +762,31 @@ app.listen(
   port,
   () => {
     console.log(
-      `Neeraj Jewellers Review App running at http://localhost:${port}`
+      "======================================"
+    );
+
+    console.log(
+      "Neeraj Jewellers Review App"
+    );
+
+    console.log(
+      `Running on port: ${port}`
+    );
+
+    console.log(
+      `Gemini configured: ${Boolean(
+        geminiApiKey
+      )}`
+    );
+
+    console.log(
+      `Groq configured: ${Boolean(
+        groqApiKey
+      )}`
+    );
+
+    console.log(
+      "======================================"
     );
   }
 );
