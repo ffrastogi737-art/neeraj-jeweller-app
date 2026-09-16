@@ -10,15 +10,43 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
-// Google Gemini API Setup (Free Tier)
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// ===============================
+// AI SETUP
+// ===============================
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY
+});
+
+// ===============================
+// EXPRESS SETUP
+// ===============================
 
 app.use(express.json({ limit: "32kb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-const ALLOWED_LANGUAGES = new Set(["English", "Hinglish", "Hindi"]);
-const ALLOWED_GENDERS = new Set(["Male", "Female"]);
-const ALLOWED_RATING = new Set([1, 2, 3, 4, 5]);
+// ===============================
+// ALLOWED VALUES
+// ===============================
+
+const ALLOWED_LANGUAGES = new Set([
+  "English",
+  "Hinglish",
+  "Hindi"
+]);
+
+const ALLOWED_GENDERS = new Set([
+  "Male",
+  "Female"
+]);
+
+const ALLOWED_RATING = new Set([
+  1,
+  2,
+  3,
+  4,
+  5
+]);
 
 const JEWELLERY_ITEMS = new Set([
   "Gold Rings / अंगूठी",
@@ -38,10 +66,56 @@ const JEWELLERY_ITEMS = new Set([
   "Silver Jewellery"
 ]);
 
+const QUICK_FEEDBACK = new Set([
+  "Good Quality",
+  "Beautiful Designs",
+  "Good Variety",
+  "Helpful Staff",
+  "Friendly Service",
+  "Good Pricing",
+  "Fast Service",
+  "Clean Showroom",
+  "Worth the Price",
+  "Good Experience"
+]);
+
+// ===============================
+// HELPERS
+// ===============================
+
 function cleanArray(value, allowedSet) {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((v) => typeof v === "string" && allowedSet.has(v)))];
+
+  return [
+    ...new Set(
+      value.filter(
+        (v) =>
+          typeof v === "string" &&
+          allowedSet.has(v)
+      )
+    )
+  ];
 }
+
+function countWords(text) {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .length;
+}
+
+function cleanReview(text) {
+  return String(text || "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^Review:\s*/i, "")
+    .trim();
+}
+
+// ===============================
+// PAYLOAD VALIDATION
+// ===============================
 
 function validatePayload(body) {
   const {
@@ -59,110 +133,283 @@ function validatePayload(body) {
     !ALLOWED_RATING.has(Number(designVarietyRating)) ||
     !ALLOWED_RATING.has(Number(customerServiceRating))
   ) {
-    throw new Error("Please provide valid 1–5 ratings for quality, variety and service.");
+    throw new Error(
+      "Please provide valid 1–5 ratings for quality, variety and service."
+    );
   }
 
-  if (!ALLOWED_LANGUAGES.has(language)) throw new Error("Invalid language.");
-  if (!ALLOWED_GENDERS.has(gender)) throw new Error("Invalid tone/gender.");
+  if (!ALLOWED_LANGUAGES.has(language)) {
+    throw new Error("Invalid language.");
+  }
+
+  if (!ALLOWED_GENDERS.has(gender)) {
+    throw new Error("Invalid tone/gender.");
+  }
 
   return {
     productQualityRating: Number(productQualityRating),
     designVarietyRating: Number(designVarietyRating),
     customerServiceRating: Number(customerServiceRating),
-    quickFeedback: Array.isArray(quickFeedback)
-      ? [...new Set(quickFeedback.filter((x) => typeof x === "string").slice(0, 8))]
-      : [],
-    jewelleryItems: cleanArray(jewelleryItems, JEWELLERY_ITEMS),
+
+    quickFeedback: cleanArray(
+      quickFeedback,
+      QUICK_FEEDBACK
+    ).slice(0, 8),
+
+    jewelleryItems: cleanArray(
+      jewelleryItems,
+      JEWELLERY_ITEMS
+    ),
+
     language,
     gender
   };
 }
 
-app.post("/api/generate-review", async (req, res) => {
-  try {
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({
-        error: "GEMINI_API_KEY is not configured on the server."
-      });
-    }
+// ===============================
+// REVIEW PROMPT
+// ===============================
 
-    const data = validatePayload(req.body);
+function buildPrompt(data) {
+  return `
+Write a natural customer review for the jewellery showroom "Neeraj Jewellers" in Dehradun.
 
-    const prompt = `
-Write a complete customer review paragraph for the jewellery showroom "Neeraj Jewellers" in Dehradun based on the details below. 
-Do not write a short 1 or 2 word response. Write a proper detailed paragraph meeting the length requirement.
-
-Customer feedback:
-- Product quality rating: ${data.productQualityRating}/5
-- Design variety rating: ${data.designVarietyRating}/5
-- Customer service rating: ${data.customerServiceRating}/5
-- Quick feedback: ${data.quickFeedback.length ? data.quickFeedback.join(", ") : "No quick feedback selected"}
-- Jewellery explored/purchased: ${data.jewelleryItems.length ? data.jewelleryItems.join(", ") : "Not specified"}
+CUSTOMER DETAILS:
+- Product quality: ${data.productQualityRating}/5
+- Design variety: ${data.designVarietyRating}/5
+- Customer service: ${data.customerServiceRating}/5
+- Quick feedback: ${
+    data.quickFeedback.length
+      ? data.quickFeedback.join(", ")
+      : "No specific feedback"
+  }
+- Jewellery explored/purchased: ${
+    data.jewelleryItems.length
+      ? data.jewelleryItems.join(", ")
+      : "Not specified"
+  }
 - Language: ${data.language}
-- Preferred voice: ${data.gender}
+- Customer voice: ${data.gender}
 
-Showroom context:
+SHOWROOM:
 - Name: Neeraj Jewellers
 - Location: Dehradun
 - Category: Jewellery Showroom
-- Offers Gold and Silver jewellery, including rings, mangalsutra, necklace sets, chains, bracelets, bangles, earrings, nose pins, pendants, silver payal, toe rings, and 1 gram gold-plated jewellery.
+- Products include gold, silver and 1 gram gold-plated jewellery.
 
-Writing requirements:
-- Strictly between 55 to 90 words long.
-- First-person customer voice.
-- Natural Indian customer wording.
-- No hashtags.
-- No quotation marks.
-- Do not mention AI.
-- For Hinglish, naturally mix Hindi and English.
-- For Hindi, use Devanagari.
-- For English, use natural Indian English.
-Return only the review text.
+STRICT WRITING RULES:
+1. Write exactly ONE review paragraph.
+2. Length must be between 55 and 90 words.
+3. Write in first-person customer voice.
+4. Make it sound like a genuine Indian customer.
+5. Do not exaggerate.
+6. Do not invent specific prices, discounts, offers or staff names.
+7. Do not use hashtags.
+8. Do not use quotation marks.
+9. Do not mention AI.
+10. Do not add headings.
+11. Do not add bullet points.
+12. For Hinglish, naturally mix Hindi and English.
+13. For Hindi, use Devanagari.
+14. For English, use natural Indian English.
+15. The customer's gender should influence the natural voice slightly, but do not mention gender.
+
+Return ONLY the review paragraph.
 `;
+}
 
-    // Gemini API Call with gemini-3.6-flash and proper length configs
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: prompt,
-      config: {
+// ===============================
+// GEMINI
+// ===============================
+
+async function generateWithGemini(prompt) {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is missing.");
+  }
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.8-flash",
+    contents: prompt,
+    config: {
+      temperature: 0.7,
+      maxOutputTokens: 250
+    }
+  });
+
+  return cleanReview(response?.text || "");
+}
+
+// ===============================
+// GROQ FALLBACK
+// ===============================
+
+async function generateWithGroq(prompt) {
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY is missing.");
+  }
+
+  const groqResponse = await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        // Current replacement for deprecated Llama 3.1 8B
+        model: "openai/gpt-oss-20b",
+
+        messages: [
+          {
+            role: "system",
+            content:
+              "You write natural, authentic Indian customer reviews. Follow the user's requested language and word count exactly."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+
         temperature: 0.7,
-        maxOutputTokens: 300
+        max_tokens: 250
+      })
+    }
+  );
+
+  const groqData = await groqResponse.json();
+
+  if (!groqResponse.ok) {
+    throw new Error(
+      groqData?.error?.message ||
+        `Groq request failed with status ${groqResponse.status}`
+    );
+  }
+
+  return cleanReview(
+    groqData?.choices?.[0]?.message?.content || ""
+  );
+}
+
+// ===============================
+// REVIEW LENGTH VALIDATION
+// ===============================
+
+function validateReviewLength(review) {
+  const words = countWords(review);
+
+  return words >= 55 && words <= 90;
+}
+
+// ===============================
+// GENERATE REVIEW API
+// ===============================
+
+app.post("/api/generate-review", async (req, res) => {
+  try {
+    const data = validatePayload(req.body);
+
+    const prompt = buildPrompt(data);
+
+    let review = "";
+    let provider = "";
+
+    // -------------------------------
+    // 1. GEMINI
+    // -------------------------------
+
+    try {
+      review = await generateWithGemini(prompt);
+      provider = "gemini";
+
+      console.log("Review generated using Gemini.");
+    } catch (geminiError) {
+      console.error(
+        "Gemini failed:",
+        geminiError.message
+      );
+
+      // -------------------------------
+      // 2. GROQ FALLBACK
+      // -------------------------------
+
+      try {
+        review = await generateWithGroq(prompt);
+        provider = "groq";
+
+        console.log("Review generated using Groq fallback.");
+      } catch (groqError) {
+        console.error(
+          "Groq failed:",
+          groqError.message
+        );
+
+        throw new Error(
+          "Both Gemini and Groq failed. Please try again later."
+        );
       }
-    });
-
-    let reviewText = "";
-    if (response && typeof response.text === "function") {
-      reviewText = response.text();
-    } else if (response && response.text) {
-      reviewText = response.text;
-    } else if (response && response.candidates?.[0]?.content?.parts?.[0]?.text) {
-      reviewText = response.candidates[0].content.parts[0].text;
     }
 
-    const review = (reviewText || "").trim();
+    // -------------------------------
+    // FINAL VALIDATION
+    // -------------------------------
 
-    if (!review || review.split(/\s+/).length < 5) {
-      return res.status(502).json({ error: "AI returned an incomplete review. Please try again." });
+    if (!review) {
+      return res.status(502).json({
+        error: "AI returned an empty review. Please try again."
+      });
     }
+
+    if (!validateReviewLength(review)) {
+      return res.status(502).json({
+        error:
+          "AI generated a review outside the required 55–90 word range. Please try again."
+      });
+    }
+
+    // -------------------------------
+    // RESPONSE
+    // -------------------------------
 
     res.json({
       review,
+      provider,
+      wordCount: countWords(review),
+
       googleReviewUrl:
         process.env.GOOGLE_REVIEW_URL ||
         "https://www.google.com/search?q=Neeraj+Jewellers+Dehradun"
     });
+
   } catch (error) {
-    console.error(error);
+    console.error("Generate review error:", error);
+
     res.status(400).json({
-      error: error?.message || "Unable to generate the review."
+      error:
+        error?.message ||
+        "Unable to generate the review."
     });
   }
 });
 
+// ===============================
+// HEALTH CHECK
+// ===============================
+
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    service: "Neeraj Jewellers Review Generator"
+  });
 });
 
+// ===============================
+// START SERVER
+// ===============================
+
 app.listen(port, () => {
-  console.log(`Neeraj Jewellers Review App running at http://localhost:${port}`);
+  console.log(
+    `Neeraj Jewellers Review App running at http://localhost:${port}`
+  );
 });
