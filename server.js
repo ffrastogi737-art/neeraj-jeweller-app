@@ -123,11 +123,30 @@ Writing requirements:
 Return only the review text.
 `;
 
-    // Calling Google Gemini Free Tier Model (gemini-2.5-flash or gemini-3-flash)
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: prompt,
-    });
+    let response;
+    
+    // SMART FALLBACK & SPEED BOOST 
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: prompt,
+        config: {
+          temperature: 0.6, // इसे कम करने से AI तेज़ काम करता है 
+          maxOutputTokens: 150 // फालतू लंबा न खींचे, जल्दी दे दे
+        }
+      });
+    } catch (primaryError) {
+      console.log("नया मॉडल बिज़ी है (503), पुराने मॉडल (1.5-flash) पर स्विच कर रहे हैं...", primaryError.message);
+      
+      response = await ai.models.generateContent({
+        model: "gemini-1.5-flash",
+        contents: prompt,
+        config: {
+          temperature: 0.6, 
+          maxOutputTokens: 150 
+        }
+      });
+    }
 
     const review = (response.text || "").trim();
 
@@ -139,7 +158,7 @@ Return only the review text.
       review,
       googleReviewUrl:
         process.env.GOOGLE_REVIEW_URL ||
-        "https://www.com/search?q=Neeraj+Jewellers+Dehradun"
+        "https://www.google.com/search?q=Neeraj+Jewellers+Dehradun"
     });
   } catch (error) {
     console.error(error);
