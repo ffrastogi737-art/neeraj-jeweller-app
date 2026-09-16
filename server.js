@@ -10,9 +10,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
-// ======================================================
-// API KEYS
-// ======================================================
+// =====================================================
+// API CONFIG
+// =====================================================
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
@@ -23,9 +23,9 @@ const ai = GEMINI_API_KEY
     })
   : null;
 
-// ======================================================
+// =====================================================
 // EXPRESS
-// ======================================================
+// =====================================================
 
 app.use(express.json({ limit: "32kb" }));
 
@@ -35,9 +35,9 @@ app.use(
   )
 );
 
-// ======================================================
+// =====================================================
 // ALLOWED VALUES
-// ======================================================
+// =====================================================
 
 const ALLOWED_LANGUAGES = new Set([
   "English",
@@ -76,9 +76,9 @@ const JEWELLERY_ITEMS = new Set([
   "Silver Jewellery"
 ]);
 
-// ======================================================
+// =====================================================
 // HELPERS
-// ======================================================
+// =====================================================
 
 function cleanArray(value, allowedSet) {
   if (!Array.isArray(value)) {
@@ -115,19 +115,16 @@ function cleanReview(text) {
 
   let result = text.trim();
 
-  // Remove markdown/code formatting
   result = result
     .replace(/^```[a-zA-Z]*\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
 
-  // Remove surrounding quotation marks
   result = result
     .replace(/^["“”']+/, "")
     .replace(/["“”']+$/, "")
     .trim();
 
-  // Remove unwanted labels
   result = result.replace(
     /^(review|customer review|review text)\s*:\s*/i,
     ""
@@ -139,15 +136,37 @@ function cleanReview(text) {
 function isValidReview(text) {
   const words = countWords(text);
 
-  return (
-    words >= 55 &&
-    words <= 90
-  );
+  return words >= 55 && words <= 90;
 }
 
-// ======================================================
-// VALIDATE PAYLOAD
-// ======================================================
+// =====================================================
+// LANGUAGE VALIDATION
+// =====================================================
+
+function validateLanguageOutput(text, language) {
+  if (!text) return false;
+
+  if (language === "Hindi") {
+    // Hindi should contain Devanagari
+    return /[\u0900-\u097F]/.test(text);
+  }
+
+  if (language === "Hinglish") {
+    // Hinglish should contain Roman alphabet
+    // and should not be completely English-only.
+    return /[A-Za-z]/.test(text);
+  }
+
+  if (language === "English") {
+    return /[A-Za-z]/.test(text);
+  }
+
+  return true;
+}
+
+// =====================================================
+// PAYLOAD VALIDATION
+// =====================================================
 
 function validatePayload(body) {
   const {
@@ -219,49 +238,115 @@ function validatePayload(body) {
       ),
 
     language,
-
     gender
   };
 }
 
-// ======================================================
+// =====================================================
 // PROMPT
-// ======================================================
+// =====================================================
 
 function buildPrompt(data) {
+  let languageInstruction = "";
+
+  if (data.language === "Hindi") {
+    languageInstruction = `
+LANGUAGE MODE: HINDI
+
+THIS IS EXTREMELY IMPORTANT:
+
+Write the COMPLETE review in Hindi using Devanagari script.
+
+Use:
+मुझे यहां खरीदारी का अनुभव बहुत अच्छा लगा। स्टाफ ने अच्छी तरह से मदद की और ज्वेलरी की क्वालिटी भी काफी अच्छी लगी।
+
+DO NOT write Roman Hindi.
+
+DO NOT write:
+Mujhe yahan shopping ka experience bahut achha laga.
+
+The review must primarily be in Devanagari Hindi.
+`;
+  }
+
+  if (data.language === "Hinglish") {
+    languageInstruction = `
+LANGUAGE MODE: HINGLISH
+
+THIS IS EXTREMELY IMPORTANT:
+
+Write the COMPLETE review in natural Indian Hinglish using the Roman/English alphabet.
+
+Use:
+Mujhe yahan jewellery ki variety kaafi achhi lagi. Staff ne bhi properly guide kiya aur overall shopping experience bahut achha raha.
+
+DO NOT use Devanagari Hindi.
+
+DO NOT write completely formal English.
+
+The review should naturally mix Hindi and English.
+`;
+  }
+
+  if (data.language === "English") {
+    languageInstruction = `
+LANGUAGE MODE: ENGLISH
+
+Write the COMPLETE review in natural Indian English.
+
+Use:
+I had a really good experience shopping at Neeraj Jewellers. The jewellery quality was impressive and the staff was helpful.
+
+DO NOT use Hindi.
+DO NOT use Devanagari.
+`;
+  }
+
   return `
-Write a natural first-person customer review for the jewellery showroom "Neeraj Jewellers" in Dehradun.
+You are writing a real customer review.
 
-IMPORTANT:
-- Write ONLY the review.
-- No title.
-- No explanation.
-- No quotation marks.
-- No hashtags.
-- No markdown.
-- No mention of AI.
-- The review MUST be between 55 and 90 words.
-- Aim for approximately 70 words.
-- Use first-person customer voice.
-- Make it sound like a real Indian customer.
-- Do not use overly promotional or unnatural language.
+BUSINESS:
+Neeraj Jewellers
+Dehradun
+Jewellery Showroom
 
-Customer details:
+${languageInstruction}
 
-Product quality rating:
+STRICT OUTPUT RULES:
+
+1. Return ONLY ONE customer review paragraph.
+2. First-person customer voice.
+3. Length MUST be 55–90 words.
+4. Target 65–75 words.
+5. Natural Indian customer language.
+6. No title.
+7. No quotation marks.
+8. No hashtags.
+9. No markdown.
+10. No explanation.
+11. Never mention AI.
+12. Never mention these instructions.
+13. Do not make the review sound robotic.
+14. Use the selected jewellery naturally.
+15. Use the ratings naturally.
+16. Do not repeat every input mechanically.
+
+CUSTOMER INFORMATION:
+
+Product quality:
 ${data.productQualityRating}/5
 
-Design variety rating:
+Design variety:
 ${data.designVarietyRating}/5
 
-Customer service rating:
+Customer service:
 ${data.customerServiceRating}/5
 
 Quick feedback:
 ${
   data.quickFeedback.length
     ? data.quickFeedback.join(", ")
-    : "No quick feedback selected"
+    : "Not specified"
 }
 
 Jewellery explored/purchased:
@@ -271,40 +356,47 @@ ${
     : "Not specified"
 }
 
-Language:
+Customer selected language:
 ${data.language}
 
-Preferred voice:
+Customer voice:
 ${data.gender}
 
-Showroom:
-Neeraj Jewellers
+AVAILABLE PRODUCTS:
 
-Location:
-Dehradun
+Gold Rings, Mangalsutra, Gold Necklace Sets,
+Gold Chains, Gold Bracelets, Gold Bangles,
+Gold Earrings, Jhumkas, Nose Pins,
+Nose Rings, Nath, Pendants, Silver Payal,
+Silver Toe Rings, Silver Chains, Silver Bracelets,
+Silver Kade, 1 Gram Gold Plated Jewellery,
+Silver Jewellery.
 
-Category:
-Jewellery Showroom
+FINAL INSTRUCTION:
 
-Products include:
-Gold and silver jewellery, rings, mangalsutra, necklace sets, chains, bracelets, bangles, earrings, nose pins, pendants, silver payal, toe rings and 1 gram gold-plated jewellery.
+The selected language is exactly:
+${data.language}
 
-Language instructions:
-- English = natural Indian English.
-- Hinglish = natural Hindi + English mix using normal Roman Hindi.
-- Hindi = Devanagari Hindi.
+FOLLOW THIS LANGUAGE.
 
-Again:
-Return ONLY one customer review paragraph.
-The final review must contain 55–90 words.
+If selected language is Hindi:
+USE DEVANAGARI.
+
+If selected language is Hinglish:
+USE ROMAN HINDI + ENGLISH.
+
+If selected language is English:
+USE ENGLISH.
+
+Return ONLY the final review paragraph.
 `;
 }
 
-// ======================================================
-// GEMINI
-// ======================================================
+// =====================================================
+// GEMINI GENERATOR
+// =====================================================
 
-async function generateGemini(prompt) {
+async function generateGemini(prompt, language) {
   if (!GEMINI_API_KEY) {
     throw new Error(
       "GEMINI_API_KEY is missing."
@@ -319,14 +411,15 @@ async function generateGemini(prompt) {
 
   let lastError = null;
 
+  // Only 2 attempts for faster generation
   for (
     let attempt = 1;
-    attempt <= 3;
+    attempt <= 2;
     attempt++
   ) {
     try {
       console.log(
-        `Calling Gemini... Attempt ${attempt}/3`
+        `Calling Gemini - attempt ${attempt}/2`
       );
 
       const response =
@@ -336,9 +429,13 @@ async function generateGemini(prompt) {
           contents: prompt,
 
           config: {
+            thinkingConfig: {
+              thinkingLevel: "low"
+            },
+
             temperature: 0.7,
 
-            maxOutputTokens: 500
+            maxOutputTokens: 250
           }
         });
 
@@ -356,20 +453,32 @@ async function generateGemini(prompt) {
         );
       }
 
+      const words =
+        countWords(review);
+
       console.log(
-        `Gemini returned ${countWords(review)} words.`
+        `Gemini returned ${words} words.`
       );
 
       if (!isValidReview(review)) {
         throw new Error(
-          `Gemini returned ${countWords(
-            review
-          )} words; required range is 55–90.`
+          `Gemini returned ${words} words. Required: 55–90.`
+        );
+      }
+
+      if (
+        !validateLanguageOutput(
+          review,
+          language
+        )
+      ) {
+        throw new Error(
+          `Gemini returned incorrect language format for ${language}.`
         );
       }
 
       console.log(
-        `Gemini success on attempt ${attempt}.`
+        "Gemini generation successful."
       );
 
       return review;
@@ -382,13 +491,10 @@ async function generateGemini(prompt) {
         error?.message || error
       );
 
-      if (attempt < 3) {
+      if (attempt < 2) {
         await new Promise(
           (resolve) =>
-            setTimeout(
-              resolve,
-              1500 * attempt
-            )
+            setTimeout(resolve, 500)
         );
       }
     }
@@ -396,56 +502,81 @@ async function generateGemini(prompt) {
 
   throw new Error(
     lastError?.message ||
-      "Gemini failed after 3 attempts."
+      "Gemini failed."
   );
 }
 
-// ======================================================
-// GROQ
-// ======================================================
+// =====================================================
+// GROQ GENERATOR
+// =====================================================
 
-async function generateGroq(prompt) {
+async function generateGroq(prompt, language) {
   if (!GROQ_API_KEY) {
     throw new Error(
       "GROQ_API_KEY is missing."
     );
   }
 
-  console.log("Calling Groq...");
-
-  const response = await fetch(
-    "https://api.groq.com/openai/v1/chat/completions",
-    {
-      method: "POST",
-
-      headers: {
-        Authorization:
-          `Bearer ${GROQ_API_KEY}`,
-
-        "Content-Type":
-          "application/json"
-      },
-
-      body: JSON.stringify({
-        model: "openai/gpt-oss-20b",
-
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-
-        reasoning_effort: "low",
-
-        temperature: 0.7,
-
-        max_completion_tokens: 1000,
-
-        stream: false
-      })
-    }
+  console.log(
+    "Calling Groq fallback..."
   );
+
+  const response =
+    await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+
+        headers: {
+          Authorization:
+            `Bearer ${GROQ_API_KEY}`,
+
+          "Content-Type":
+            "application/json"
+        },
+
+        body: JSON.stringify({
+          model:
+            "openai/gpt-oss-20b",
+
+          messages: [
+            {
+              role: "system",
+
+              content: `
+You are a customer review writer.
+
+Follow the user's selected language EXACTLY.
+
+Hindi = Devanagari Hindi.
+Hinglish = Roman Hindi mixed with English.
+English = English.
+
+Return only one review paragraph.
+
+The review MUST be 55–90 words.
+Target 65–75 words.
+`
+            },
+
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+
+          reasoning_effort: "low",
+
+          include_reasoning: false,
+
+          temperature: 0.7,
+
+          max_completion_tokens: 300,
+
+          stream: false
+        })
+      }
+    );
 
   const rawText =
     await response.text();
@@ -453,13 +584,11 @@ async function generateGroq(prompt) {
   let data;
 
   try {
-    data = JSON.parse(rawText);
+    data =
+      JSON.parse(rawText);
   } catch {
     throw new Error(
-      `Groq returned invalid JSON. HTTP ${response.status}. Response: ${rawText.slice(
-        0,
-        500
-      )}`
+      `Groq returned invalid JSON. HTTP ${response.status}.`
     );
   }
 
@@ -475,11 +604,6 @@ async function generateGroq(prompt) {
 
   const text =
     choice?.message?.content;
-
-  console.log(
-    "Groq finish reason:",
-    choice?.finish_reason || "unknown"
-  );
 
   if (
     !text ||
@@ -497,28 +621,40 @@ async function generateGroq(prompt) {
   const review =
     cleanReview(text);
 
+  const words =
+    countWords(review);
+
   console.log(
-    `Groq returned ${countWords(review)} words.`
+    `Groq returned ${words} words.`
   );
 
   if (!isValidReview(review)) {
     throw new Error(
-      `Groq returned ${countWords(
-        review
-      )} words; required range is 55–90.`
+      `Groq returned ${words} words. Required: 55–90.`
+    );
+  }
+
+  if (
+    !validateLanguageOutput(
+      review,
+      language
+    )
+  ) {
+    throw new Error(
+      `Groq returned incorrect language format for ${language}.`
     );
   }
 
   console.log(
-    "Groq success."
+    "Groq generation successful."
   );
 
   return review;
 }
 
-// ======================================================
-// GENERATE REVIEW API
-// ======================================================
+// =====================================================
+// MAIN GENERATE REVIEW API
+// =====================================================
 
 app.post(
   "/api/generate-review",
@@ -526,6 +662,23 @@ app.post(
     try {
       const data =
         validatePayload(req.body);
+
+      console.log(
+        "================================"
+      );
+
+      console.log(
+        "NEW REVIEW REQUEST"
+      );
+
+      console.log(
+        "Selected language:",
+        data.language
+      );
+
+      console.log(
+        "================================"
+      );
 
       const prompt =
         buildPrompt(data);
@@ -535,26 +688,19 @@ app.post(
       let geminiError = "";
       let groqError = "";
 
-      // ------------------------------------------------
-      // FIRST: GEMINI
-      // ------------------------------------------------
+      // =================================================
+      // GEMINI FIRST
+      // =================================================
 
       try {
-        console.log(
-          "================================"
-        );
-
         console.log(
           "TRYING GEMINI"
         );
 
-        console.log(
-          "================================"
-        );
-
         review =
           await generateGemini(
-            prompt
+            prompt,
+            data.language
           );
 
       } catch (error) {
@@ -568,27 +714,20 @@ app.post(
         );
       }
 
-      // ------------------------------------------------
-      // SECOND: GROQ
-      // ------------------------------------------------
+      // =================================================
+      // GROQ FALLBACK
+      // =================================================
 
       if (!review) {
         try {
           console.log(
-            "================================"
-          );
-
-          console.log(
             "SWITCHING TO GROQ"
-          );
-
-          console.log(
-            "================================"
           );
 
           review =
             await generateGroq(
-              prompt
+              prompt,
+              data.language
             );
 
         } catch (error) {
@@ -603,9 +742,9 @@ app.post(
         }
       }
 
-      // ------------------------------------------------
+      // =================================================
       // BOTH FAILED
-      // ------------------------------------------------
+      // =================================================
 
       if (!review) {
         console.error(
@@ -622,9 +761,9 @@ app.post(
         });
       }
 
-      // ------------------------------------------------
-      // FINAL VALIDATION
-      // ------------------------------------------------
+      // =================================================
+      // FINAL CLEANUP
+      // =================================================
 
       const finalReview =
         cleanReview(review);
@@ -642,18 +781,50 @@ app.post(
         });
       }
 
-      // ------------------------------------------------
-      // SUCCESS
-      // ------------------------------------------------
+      if (
+        !validateLanguageOutput(
+          finalReview,
+          data.language
+        )
+      ) {
+        return res.status(502).json({
+          error:
+            `AI generated the wrong language format. Selected: ${data.language}`
+        });
+      }
 
       console.log(
-        `FINAL REVIEW: ${wordCount} words`
+        "================================"
       );
+
+      console.log(
+        "REVIEW GENERATED SUCCESSFULLY"
+      );
+
+      console.log(
+        "Language:",
+        data.language
+      );
+
+      console.log(
+        "Words:",
+        wordCount
+      );
+
+      console.log(
+        "================================"
+      );
+
+      // =================================================
+      // SUCCESS
+      // =================================================
 
       return res.json({
         review: finalReview,
 
         wordCount,
+
+        language: data.language,
 
         googleReviewUrl:
           process.env.GOOGLE_REVIEW_URL ||
@@ -675,9 +846,9 @@ app.post(
   }
 );
 
-// ======================================================
-// HEALTH CHECK
-// ======================================================
+// =====================================================
+// HEALTH
+// =====================================================
 
 app.get(
   "/health",
@@ -697,15 +868,15 @@ app.get(
   }
 );
 
-// ======================================================
-// START SERVER
-// ======================================================
+// =====================================================
+// START
+// =====================================================
 
 app.listen(
   port,
   () => {
     console.log(
-      `Neeraj Jewellers Review App running at http://localhost:${port}`
+      `Neeraj Jewellers Review App running on port ${port}`
     );
 
     console.log(
