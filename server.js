@@ -10,22 +10,22 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
-// =====================================================
-// AI SETUP
-// =====================================================
+// ======================================================
+// API KEYS
+// ======================================================
 
-const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
-const groqApiKey = process.env.GROQ_API_KEY?.trim();
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+const GROQ_API_KEY = process.env.GROQ_API_KEY || "";
 
-const ai = geminiApiKey
+const ai = GEMINI_API_KEY
   ? new GoogleGenAI({
-      apiKey: geminiApiKey
+      apiKey: GEMINI_API_KEY
     })
   : null;
 
-// =====================================================
+// ======================================================
 // EXPRESS
-// =====================================================
+// ======================================================
 
 app.use(express.json({ limit: "32kb" }));
 
@@ -35,9 +35,9 @@ app.use(
   )
 );
 
-// =====================================================
+// ======================================================
 // ALLOWED VALUES
-// =====================================================
+// ======================================================
 
 const ALLOWED_LANGUAGES = new Set([
   "English",
@@ -76,9 +76,9 @@ const JEWELLERY_ITEMS = new Set([
   "Silver Jewellery"
 ]);
 
-// =====================================================
+// ======================================================
 // HELPERS
-// =====================================================
+// ======================================================
 
 function cleanArray(value, allowedSet) {
   if (!Array.isArray(value)) {
@@ -88,44 +88,66 @@ function cleanArray(value, allowedSet) {
   return [
     ...new Set(
       value.filter(
-        (item) =>
-          typeof item === "string" &&
-          allowedSet.has(item)
+        (v) =>
+          typeof v === "string" &&
+          allowedSet.has(v)
       )
     )
   ];
 }
 
-function cleanReview(text) {
-  if (!text) {
-    return "";
+function countWords(text) {
+  if (!text || typeof text !== "string") {
+    return 0;
   }
 
-  return String(text)
-    .replace(/^```(?:text)?/i, "")
-    .replace(/```$/i, "")
-    .replace(/^["']|["']$/g, "")
-    .replace(/^Review:\s*/i, "")
-    .trim();
-}
-
-function countWords(text) {
-  return String(text || "")
+  return text
     .trim()
     .split(/\s+/)
     .filter(Boolean)
     .length;
 }
 
-function validWordCount(text) {
-  const count = countWords(text);
+function cleanReview(text) {
+  if (!text || typeof text !== "string") {
+    return "";
+  }
 
-  return count >= 55 && count <= 90;
+  let result = text.trim();
+
+  // Remove markdown/code formatting
+  result = result
+    .replace(/^```[a-zA-Z]*\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  // Remove surrounding quotation marks
+  result = result
+    .replace(/^["“”']+/, "")
+    .replace(/["“”']+$/, "")
+    .trim();
+
+  // Remove unwanted labels
+  result = result.replace(
+    /^(review|customer review|review text)\s*:\s*/i,
+    ""
+  );
+
+  return result.trim();
 }
 
-// =====================================================
-// PAYLOAD VALIDATION
-// =====================================================
+function isValidReview(text) {
+  const words = countWords(text);
+
+  return (
+    words >= 55 &&
+    words <= 90
+  );
+}
+
+// ======================================================
+// VALIDATE PAYLOAD
+// ======================================================
 
 function validatePayload(body) {
   const {
@@ -150,7 +172,7 @@ function validatePayload(body) {
     )
   ) {
     throw new Error(
-      "Please provide valid 1–5 ratings."
+      "Please provide valid 1–5 ratings for quality, variety and service."
     );
   }
 
@@ -162,7 +184,7 @@ function validatePayload(body) {
 
   if (!ALLOWED_GENDERS.has(gender)) {
     throw new Error(
-      "Invalid review voice."
+      "Invalid tone/gender."
     );
   }
 
@@ -197,41 +219,52 @@ function validatePayload(body) {
       ),
 
     language,
+
     gender
   };
 }
 
-// =====================================================
+// ======================================================
 // PROMPT
-// =====================================================
+// ======================================================
 
-function createPrompt(data) {
+function buildPrompt(data) {
   return `
-Write a natural customer review for:
+Write a natural first-person customer review for the jewellery showroom "Neeraj Jewellers" in Dehradun.
 
-Neeraj Jewellers
-Dehradun
-Jewellery Showroom
+IMPORTANT:
+- Write ONLY the review.
+- No title.
+- No explanation.
+- No quotation marks.
+- No hashtags.
+- No markdown.
+- No mention of AI.
+- The review MUST be between 55 and 90 words.
+- Aim for approximately 70 words.
+- Use first-person customer voice.
+- Make it sound like a real Indian customer.
+- Do not use overly promotional or unnatural language.
 
-CUSTOMER INFORMATION:
+Customer details:
 
-Product Quality Rating:
+Product quality rating:
 ${data.productQualityRating}/5
 
-Design Variety Rating:
+Design variety rating:
 ${data.designVarietyRating}/5
 
-Customer Service Rating:
+Customer service rating:
 ${data.customerServiceRating}/5
 
-Quick Feedback:
+Quick feedback:
 ${
   data.quickFeedback.length
     ? data.quickFeedback.join(", ")
-    : "No specific feedback"
+    : "No quick feedback selected"
 }
 
-Jewellery Explored/Purchased:
+Jewellery explored/purchased:
 ${
   data.jewelleryItems.length
     ? data.jewelleryItems.join(", ")
@@ -241,86 +274,40 @@ ${
 Language:
 ${data.language}
 
-Customer Voice:
+Preferred voice:
 ${data.gender}
 
-AVAILABLE PRODUCTS:
+Showroom:
+Neeraj Jewellers
 
-Gold Rings
-Mangalsutra
-Gold Necklace Sets
-Gold Chains
-Gold Bracelets
-Gold Bangles
-Gold Kade
-Gold Earrings
-Jhumkas
-Nose Pins
-Nose Rings
-Nath
-Gold Pendants
-Silver Payal
-Silver Anklets
-Silver Toe Rings
-Silver Chains
-Silver Bracelets
-Silver Kade
-1 Gram Gold Plated Jewellery
-Silver Jewellery
+Location:
+Dehradun
 
-STRICT REQUIREMENTS:
+Category:
+Jewellery Showroom
 
-- Write exactly ONE paragraph.
-- Write between 55 and 90 words.
-- Aim for approximately 70 words.
-- Write in first-person customer voice.
-- Sound like a real Indian customer.
-- Keep the review natural and believable.
-- Do not sound like an advertisement.
-- Do not invent prices.
-- Do not invent discounts.
-- Do not invent staff names.
-- Do not invent specific offers.
-- Do not mention AI.
-- Do not use hashtags.
-- Do not use quotation marks.
-- Do not use bullet points.
-- Do not add a heading.
-- Return ONLY the review.
+Products include:
+Gold and silver jewellery, rings, mangalsutra, necklace sets, chains, bracelets, bangles, earrings, nose pins, pendants, silver payal, toe rings and 1 gram gold-plated jewellery.
 
-LANGUAGE:
+Language instructions:
+- English = natural Indian English.
+- Hinglish = natural Hindi + English mix using normal Roman Hindi.
+- Hindi = Devanagari Hindi.
 
-English:
-Use natural Indian English.
-
-Hinglish:
-Use natural Roman Hindi mixed with English.
-
-Hindi:
-Use natural Hindi in Devanagari.
-
-VOICE:
-
-Male:
-Natural wording from a male customer.
-
-Female:
-Natural wording from a female customer.
-
-IMPORTANT:
-The review MUST be between 55 and 90 words.
-Target approximately 70 words.
+Again:
+Return ONLY one customer review paragraph.
+The final review must contain 55–90 words.
 `;
 }
 
-// =====================================================
+// ======================================================
 // GEMINI
-// =====================================================
+// ======================================================
 
 async function generateGemini(prompt) {
-  if (!geminiApiKey) {
+  if (!GEMINI_API_KEY) {
     throw new Error(
-      "GEMINI_API_KEY is missing in Render Environment Variables."
+      "GEMINI_API_KEY is missing."
     );
   }
 
@@ -330,108 +317,169 @@ async function generateGemini(prompt) {
     );
   }
 
-  console.log(
-    "Calling Gemini..."
-  );
+  let lastError = null;
 
-  const response =
-    await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: prompt
-    });
-
-  const text =
-    response?.text;
-
-  console.log(
-    "Gemini raw response received."
-  );
-
-  if (
-    !text ||
-    typeof text !== "string" ||
-    !text.trim()
+  for (
+    let attempt = 1;
+    attempt <= 3;
+    attempt++
   ) {
-    throw new Error(
-      "Gemini returned an empty response."
-    );
+    try {
+      console.log(
+        `Calling Gemini... Attempt ${attempt}/3`
+      );
+
+      const response =
+        await ai.models.generateContent({
+          model: "gemini-3.8-flash",
+
+          contents: prompt,
+
+          config: {
+            temperature: 0.7,
+
+            maxOutputTokens: 500
+          }
+        });
+
+      const text =
+        typeof response?.text === "function"
+          ? response.text()
+          : response?.text;
+
+      const review =
+        cleanReview(text || "");
+
+      if (!review) {
+        throw new Error(
+          "Gemini returned an empty response."
+        );
+      }
+
+      console.log(
+        `Gemini returned ${countWords(review)} words.`
+      );
+
+      if (!isValidReview(review)) {
+        throw new Error(
+          `Gemini returned ${countWords(
+            review
+          )} words; required range is 55–90.`
+        );
+      }
+
+      console.log(
+        `Gemini success on attempt ${attempt}.`
+      );
+
+      return review;
+
+    } catch (error) {
+      lastError = error;
+
+      console.error(
+        `Gemini attempt ${attempt} failed:`,
+        error?.message || error
+      );
+
+      if (attempt < 3) {
+        await new Promise(
+          (resolve) =>
+            setTimeout(
+              resolve,
+              1500 * attempt
+            )
+        );
+      }
+    }
   }
 
-  return cleanReview(text);
+  throw new Error(
+    lastError?.message ||
+      "Gemini failed after 3 attempts."
+  );
 }
 
-// =====================================================
+// ======================================================
 // GROQ
-// =====================================================
+// ======================================================
 
 async function generateGroq(prompt) {
-  if (!groqApiKey) {
+  if (!GROQ_API_KEY) {
     throw new Error(
-      "GROQ_API_KEY is missing in Render Environment Variables."
+      "GROQ_API_KEY is missing."
     );
   }
 
-  console.log(
-    "Calling Groq..."
+  console.log("Calling Groq...");
+
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+
+      headers: {
+        Authorization:
+          `Bearer ${GROQ_API_KEY}`,
+
+        "Content-Type":
+          "application/json"
+      },
+
+      body: JSON.stringify({
+        model: "openai/gpt-oss-20b",
+
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+
+        reasoning_effort: "low",
+
+        temperature: 0.7,
+
+        max_completion_tokens: 1000,
+
+        stream: false
+      })
+    }
   );
 
-  const response =
-    await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-
-        headers: {
-          Authorization:
-            `Bearer ${groqApiKey}`,
-
-          "Content-Type":
-            "application/json"
-        },
-
-        body: JSON.stringify({
-          model:
-            "openai/gpt-oss-20b",
-
-          messages: [
-            {
-              role: "system",
-              content:
-                "You write natural Indian customer reviews. Follow the requested language and word count exactly."
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-
-          temperature: 0.7,
-
-          max_completion_tokens: 300
-        })
-      }
-    );
+  const rawText =
+    await response.text();
 
   let data;
 
   try {
-    data =
-      await response.json();
+    data = JSON.parse(rawText);
   } catch {
     throw new Error(
-      `Groq returned invalid JSON. HTTP ${response.status}`
+      `Groq returned invalid JSON. HTTP ${response.status}. Response: ${rawText.slice(
+        0,
+        500
+      )}`
     );
   }
 
   if (!response.ok) {
     throw new Error(
       data?.error?.message ||
-      `Groq API error. HTTP ${response.status}`
+        `Groq API error. HTTP ${response.status}`
     );
   }
 
+  const choice =
+    data?.choices?.[0];
+
   const text =
-    data?.choices?.[0]?.message?.content;
+    choice?.message?.content;
+
+  console.log(
+    "Groq finish reason:",
+    choice?.finish_reason || "unknown"
+  );
 
   if (
     !text ||
@@ -439,146 +487,61 @@ async function generateGroq(prompt) {
     !text.trim()
   ) {
     throw new Error(
-      "Groq returned an empty response."
+      `Groq returned an empty response. Finish reason: ${
+        choice?.finish_reason ||
+        "unknown"
+      }`
     );
   }
 
-  return cleanReview(text);
-}
-
-// =====================================================
-// RETRY PROMPT
-// =====================================================
-
-function createRetryPrompt(
-  originalPrompt,
-  previousReview
-) {
-  return `
-${originalPrompt}
-
-YOUR PREVIOUS RESPONSE WAS:
-
-${previousReview}
-
-The previous response contained:
-${countWords(previousReview)} words.
-
-Generate a completely NEW review.
-
-FINAL RULE:
-The new review MUST contain 55 to 90 words.
-
-Aim for 70 words.
-
-Return ONLY the review paragraph.
-Do not explain anything.
-Do not mention word count.
-`;
-}
-
-// =====================================================
-// PROVIDER GENERATION
-// =====================================================
-
-async function generateFromProvider(
-  provider,
-  prompt
-) {
-  if (provider === "gemini") {
-    return await generateGemini(
-      prompt
-    );
-  }
-
-  return await generateGroq(
-    prompt
-  );
-}
-
-// =====================================================
-// GENERATE + RETRY
-// =====================================================
-
-async function generateValidReview(
-  provider,
-  prompt
-) {
-  // First attempt
-  let review =
-    await generateFromProvider(
-      provider,
-      prompt
-    );
+  const review =
+    cleanReview(text);
 
   console.log(
-    `${provider} first response: ${countWords(review)} words`
+    `Groq returned ${countWords(review)} words.`
   );
 
-  // Already valid
-  if (validWordCount(review)) {
-    return review;
-  }
-
-  // Retry
-  console.log(
-    `${provider} response outside 55-90 words. Retrying...`
-  );
-
-  const retryPrompt =
-    createRetryPrompt(
-      prompt,
-      review
-    );
-
-  review =
-    await generateFromProvider(
-      provider,
-      retryPrompt
-    );
-
-  console.log(
-    `${provider} retry response: ${countWords(review)} words`
-  );
-
-  if (!validWordCount(review)) {
+  if (!isValidReview(review)) {
     throw new Error(
-      `${provider} generated ${countWords(review)} words after retry.`
+      `Groq returned ${countWords(
+        review
+      )} words; required range is 55–90.`
     );
   }
+
+  console.log(
+    "Groq success."
+  );
 
   return review;
 }
 
-// =====================================================
-// MAIN API
-// =====================================================
+// ======================================================
+// GENERATE REVIEW API
+// ======================================================
 
 app.post(
   "/api/generate-review",
   async (req, res) => {
     try {
       const data =
-        validatePayload(
-          req.body
-        );
+        validatePayload(req.body);
 
       const prompt =
-        createPrompt(data);
+        buildPrompt(data);
 
       let review = "";
-      let provider = "";
 
-      let geminiError = null;
-      let groqError = null;
+      let geminiError = "";
+      let groqError = "";
 
-      // =================================================
-      // TRY GEMINI
-      // =================================================
+      // ------------------------------------------------
+      // FIRST: GEMINI
+      // ------------------------------------------------
 
       try {
         console.log(
-          "=============================="
+          "================================"
         );
 
         console.log(
@@ -586,35 +549,33 @@ app.post(
         );
 
         console.log(
-          "=============================="
+          "================================"
         );
 
         review =
-          await generateValidReview(
-            "gemini",
+          await generateGemini(
             prompt
           );
-
-        provider =
-          "Gemini";
 
       } catch (error) {
         geminiError =
           error?.message ||
-          String(error);
+          "Unknown Gemini error";
 
         console.error(
           "GEMINI ERROR:",
-          error
+          geminiError
         );
+      }
 
-        // ===============================================
-        // TRY GROQ
-        // ===============================================
+      // ------------------------------------------------
+      // SECOND: GROQ
+      // ------------------------------------------------
 
+      if (!review) {
         try {
           console.log(
-            "=============================="
+            "================================"
           );
 
           console.log(
@@ -622,38 +583,36 @@ app.post(
           );
 
           console.log(
-            "=============================="
+            "================================"
           );
 
           review =
-            await generateValidReview(
-              "groq",
+            await generateGroq(
               prompt
             );
 
-          provider =
-            "Groq";
-
-        } catch (error2) {
+        } catch (error) {
           groqError =
-            error2?.message ||
-            String(error2);
+            error?.message ||
+            "Unknown Groq error";
 
           console.error(
             "GROQ ERROR:",
-            error2
+            groqError
           );
         }
       }
 
-      // =================================================
+      // ------------------------------------------------
       // BOTH FAILED
-      // =================================================
+      // ------------------------------------------------
 
       if (!review) {
-        return res.status(502).json({
-          success: false,
+        console.error(
+          "BOTH AI SERVICES FAILED"
+        );
 
+        return res.status(502).json({
           error:
             "Both AI services failed.",
 
@@ -663,52 +622,38 @@ app.post(
         });
       }
 
-      // =================================================
-      // FINAL CLEAN
-      // =================================================
+      // ------------------------------------------------
+      // FINAL VALIDATION
+      // ------------------------------------------------
 
-      review =
+      const finalReview =
         cleanReview(review);
 
       const wordCount =
-        countWords(review);
-
-      // =================================================
-      // FINAL WORD CHECK
-      // =================================================
+        countWords(finalReview);
 
       if (
         wordCount < 55 ||
         wordCount > 90
       ) {
         return res.status(502).json({
-          success: false,
-
           error:
-            `AI generated ${wordCount} words. Required: 55–90 words.`,
-
-          provider,
-
-          review
+            `AI generated a review outside the required 55–90 word range. Received ${wordCount} words.`
         });
       }
 
-      // =================================================
+      // ------------------------------------------------
       // SUCCESS
-      // =================================================
+      // ------------------------------------------------
 
       console.log(
-        `SUCCESS: ${provider} - ${wordCount} words`
+        `FINAL REVIEW: ${wordCount} words`
       );
 
       return res.json({
-        success: true,
-
-        review,
+        review: finalReview,
 
         wordCount,
-
-        provider,
 
         googleReviewUrl:
           process.env.GOOGLE_REVIEW_URL ||
@@ -717,24 +662,22 @@ app.post(
 
     } catch (error) {
       console.error(
-        "API ERROR:",
+        "REQUEST ERROR:",
         error
       );
 
       return res.status(400).json({
-        success: false,
-
         error:
           error?.message ||
-          "Unable to generate review."
+          "Unable to generate the review."
       });
     }
   }
 );
 
-// =====================================================
+// ======================================================
 // HEALTH CHECK
-// =====================================================
+// ======================================================
 
 app.get(
   "/health",
@@ -743,10 +686,10 @@ app.get(
       ok: true,
 
       geminiConfigured:
-        Boolean(geminiApiKey),
+        Boolean(GEMINI_API_KEY),
 
       groqConfigured:
-        Boolean(groqApiKey),
+        Boolean(GROQ_API_KEY),
 
       service:
         "Neeraj Jewellers Review Generator"
@@ -754,39 +697,27 @@ app.get(
   }
 );
 
-// =====================================================
+// ======================================================
 // START SERVER
-// =====================================================
+// ======================================================
 
 app.listen(
   port,
   () => {
     console.log(
-      "======================================"
-    );
-
-    console.log(
-      "Neeraj Jewellers Review App"
-    );
-
-    console.log(
-      `Running on port: ${port}`
+      `Neeraj Jewellers Review App running at http://localhost:${port}`
     );
 
     console.log(
       `Gemini configured: ${Boolean(
-        geminiApiKey
+        GEMINI_API_KEY
       )}`
     );
 
     console.log(
       `Groq configured: ${Boolean(
-        groqApiKey
+        GROQ_API_KEY
       )}`
-    );
-
-    console.log(
-      "======================================"
     );
   }
 );
