@@ -136,8 +136,8 @@ Return only the review text.
     } catch (primaryError) {
       console.log("Gemini फेल हुआ या बिजी है, Groq बैकअप पर स्विच कर रहे हैं...", primaryError.message);
       
-      // दूसरी कोशिश: Groq API (Smart Fallback)
-      if (!process.env.GROQ_APT_KEY) {
+      // दूसरी कोशिश: Groq API (Smart Fallback) - यहाँ सही कर दिया गया है
+      if (!process.env.GROQ_API_KEY) {
         throw new Error("Gemini and Groq API keys are both missing or unconfigured.");
       }
 
