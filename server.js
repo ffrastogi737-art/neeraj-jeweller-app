@@ -136,7 +136,7 @@ Return only the review text.
     } catch (primaryError) {
       console.log("Gemini फेल हुआ या बिजी है, Groq बैकअप पर स्विच कर रहे हैं...", primaryError.message);
       
-      // दूसरी कोशिश: Groq API (Smart Fallback) - यहाँ सही कर दिया गया है
+      // दूसरी कोशिश: Groq API (Smart Fallback)
       if (!process.env.GROQ_API_KEY) {
         throw new Error("Gemini and Groq API keys are both missing or unconfigured.");
       }
@@ -148,7 +148,7 @@ Return only the review text.
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "llama-3.3-70b-versatile",
           messages: [{ role: "user", content: prompt }],
           temperature: 0.6,
           max_tokens: 150
