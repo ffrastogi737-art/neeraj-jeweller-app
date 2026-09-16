@@ -89,11 +89,8 @@ app.post("/api/generate-review", async (req, res) => {
     const data = validatePayload(req.body);
 
     const prompt = `
-Create one natural customer review draft for the jewellery showroom "Neeraj Jewellers" in Dehradun.
-
-This is a review-writing assistant, not a fact generator. Use ONLY the customer feedback supplied below.
-Do not invent purchases, prices, purity claims, guarantees, staff names, discounts, or other facts.
-Do not force praise if the ratings are low. The wording must accurately reflect the ratings.
+Write a complete customer review paragraph for the jewellery showroom "Neeraj Jewellers" in Dehradun based on the details below. 
+Do not write a short 1 or 2 word response. Write a proper detailed paragraph meeting the length requirement.
 
 Customer feedback:
 - Product quality rating: ${data.productQualityRating}/5
@@ -111,7 +108,7 @@ Showroom context:
 - Offers Gold and Silver jewellery, including rings, mangalsutra, necklace sets, chains, bracelets, bangles, earrings, nose pins, pendants, silver payal, toe rings, and 1 gram gold-plated jewellery.
 
 Writing requirements:
-- 55–90 words.
+- Strictly between 55 to 90 words long.
 - First-person customer voice.
 - Natural Indian customer wording.
 - No hashtags.
@@ -123,20 +120,29 @@ Writing requirements:
 Return only the review text.
 `;
 
-    // Gemini API Call with gemini-3.6-flash model
+    // Gemini API Call with gemini-3.6-flash and proper length configs
     const response = await ai.models.generateContent({
       model: "gemini-3.6-flash",
       contents: prompt,
       config: {
-        temperature: 0.6,
-        maxOutputTokens: 150
+        temperature: 0.7,
+        maxOutputTokens: 300
       }
     });
 
-    const review = (response.text || "").trim();
+    let reviewText = "";
+    if (response && typeof response.text === "function") {
+      reviewText = response.text();
+    } else if (response && response.text) {
+      reviewText = response.text;
+    } else if (response && response.candidates?.[0]?.content?.parts?.[0]?.text) {
+      reviewText = response.candidates[0].content.parts[0].text;
+    }
 
-    if (!review) {
-      return res.status(502).json({ error: "AI returned an empty review." });
+    const review = (reviewText || "").trim();
+
+    if (!review || review.split(/\s+/).length < 5) {
+      return res.status(502).json({ error: "AI returned an incomplete review. Please try again." });
     }
 
     res.json({
