@@ -80,6 +80,12 @@ function validatePayload(body) {
 
 app.post("/api/generate-review", async (req, res) => {
   try {
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        error: "GEMINI_API_KEY is not configured on the server."
+      });
+    }
+
     const data = validatePayload(req.body);
 
     const prompt = `
@@ -117,54 +123,17 @@ Writing requirements:
 Return only the review text.
 `;
 
-    let reviewText = "";
-
-    try {
-      // पहली कोशिश: Gemini API
-      if (!process.env.GEMINI_API_KEY) {
-        throw new Error("GEMINI_API_KEY is missing");
+    // Gemini API Call with 1.5-flash (Fast & Stable)
+    const response = await ai.models.generateContent({
+      model: "gemini-1.5-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.6,
+        maxOutputTokens: 150
       }
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: prompt,
-        config: {
-          temperature: 0.6,
-          maxOutputTokens: 150
-        }
-      });
-      reviewText = response.text || "";
-    } catch (primaryError) {
-      console.log("Gemini फेल हुआ या बिजी है, Groq बैकअप पर स्विच कर रहे हैं...", primaryError.message);
-      
-      // दूसरी कोशिश: Groq API (Smart Fallback)
-      if (!process.env.GROQ_API_KEY) {
-        throw new Error("Gemini and Groq API keys are both missing or unconfigured.");
-      }
+    });
 
-      const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.6,
-          max_tokens: 150
-        })
-      });
-
-      const groqData = await groqResponse.json();
-
-      if (groqData.error) {
-        throw new Error(groqData.error.message || "Groq backup failed.");
-      }
-
-      reviewText = groqData.choices?.[0]?.message?.content || "";
-    }
-
-    const review = (reviewText || "").trim();
+    const review = (response.text || "").trim();
 
     if (!review) {
       return res.status(502).json({ error: "AI returned an empty review." });
