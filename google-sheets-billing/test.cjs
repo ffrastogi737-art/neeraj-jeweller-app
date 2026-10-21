@@ -4,11 +4,12 @@ const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const ctx = {};
 vm.runInNewContext(fs.readFileSync(__dirname + '/Code.gs', 'utf8'), ctx);
 
-const item = (weight, rate, qty) => ({ name: 'Ring', type: 'Gold', weight, rate, qty });
+const item = (weight, rate, qty) => ({ name: 'Ring', type: 'Gold', hsn: ' 7113 ', weight, rate, qty });
 
 // Bina GST
 let b = ctx.calculateBill({ items: [item('2.345', '6500', '1'), item(10, 85.5, 2)], gst: false });
 assert.strictEqual(b.items[0].amount, 15242.5);
+assert.strictEqual(b.items[0].hsn, '7113');
 assert.strictEqual(b.subtotal, 16952.5);
 assert.strictEqual(b.cgst + b.sgst, 0);
 assert.strictEqual(b.total, 16953);

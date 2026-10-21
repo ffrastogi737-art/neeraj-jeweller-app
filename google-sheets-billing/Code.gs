@@ -11,17 +11,24 @@ var TZ = 'Asia/Kolkata'; // India ka time zone, taaki date sahi aaye
 
 // Pehli baar Settings sheet mein yahi values bharengi. Baad mein sheet se hi badlo.
 var DEFAULT_SETTINGS = [
+  ['Top Line', 'जय शंकर जी'],
   ['Shop Name (Hindi)', 'नीरज ज्वैलर्स'],
   ['Shop Name (English)', 'NEERAJ JEWELLERS'],
-  ['Tagline', 'Gold & Silver Jewellery'],
-  ['Address', '11, Arijit Prasad Marg, Dehradun'],
-  ['Phone', '8923573805, 9536005642'],
-  ['GSTIN', ''],
+  ['Tagline', 'A Jewellery with best return value'],
+  ['Since', 'Since 1980'],
+  ['Address', '11, Ajit Prasad Marg, Dehradun'],
+  ['Phone', '9536005642, 8923573805'],
+  ['GSTIN', '05ACKPR9481Q1ZI'],
   ['GST Rate (%)', 3],
   ['Invoice Prefix', 'NJ-'],
   ['Next Invoice No', 1],
   ['PDF Folder ID', ''],
-  ['Terms', 'Goods once sold will not be taken back.|Weight checked & accepted in front of customer.|Subject to Dehradun jurisdiction.']
+  // {customer} ki jagah bill pe customer ka naam chhapega
+  ['Terms', 'Goods once sold are returnable or exchangeable to us only & according to terms & conditions at that time of return/exchange.' +
+    '|Satisfy yourself in every aspect (Purity, Wt., Counting, Rate, Value or any other concern regarding this bill) before leaving the premises. No claims shall be entertained thereafter under any circumstances of any type.' +
+    '|All disputes are subject to Dehradun Jurisdiction only.' +
+    '|The purity of Gold Ornaments/articles mentioned above is subject to impurity & can vary due to / on account of soldering, alloy, means, stones & lac used in making or repairing of these ornaments/articles.' +
+    '|I, {customer}, have voluntarily, willingly & after fully satisfying myself of the quality, quantity, standard, design, rates, value, purity, specification(s) of the article(s) or gold ornament(s) mentioned in this bill with a full & complete understanding of the contents of this bill, explanations & clarifications. I have of my free & voluntary will & accord, purchased & received the above article(s) or gold ornament(s) in perfect & acceptable condition & in token whereof I have appended my signature here in below and no claims will be raised in future.']
 ];
 
 // Sheet khulte hi ye chalta hai: menu banata hai aur zaroori sheets bana deta hai
@@ -43,6 +50,9 @@ function setupSheets() {
     s.setColumnWidth(1, 180);
     s.setColumnWidth(2, 500);
   }
+  // Purani Settings sheet mein nayi settings (jaise Top Line, Since) na hon to neeche jod do
+  var have = getSettings();
+  DEFAULT_SETTINGS.forEach(function (d) { if (!(d[0] in have)) ss.getSheetByName(SETTINGS_SHEET).appendRow(d); });
   if (!ss.getSheetByName(HISTORY_SHEET)) {
     var h = ss.insertSheet(HISTORY_SHEET);
     h.appendRow(['Date', 'Invoice No', 'Customer', 'Mobile', 'Total (₹)', 'GST', 'PDF Link']);
@@ -102,7 +112,7 @@ function validateForm(form) {
 function calculateBill(form) {
   var items = form.items.map(function (it) {
     var weight = Number(it.weight), rate = Number(it.rate), qty = Number(it.qty);
-    return { name: String(it.name).trim(), type: it.type || 'Other', weight: weight, rate: rate, qty: qty,
+    return { name: String(it.name).trim(), type: it.type || 'Other', hsn: String(it.hsn || '').trim(), weight: weight, rate: rate, qty: qty,
              amount: round2(weight * rate * qty) };
   });
   var subtotal = round2(items.reduce(function (sum, it) { return sum + it.amount; }, 0));
@@ -162,9 +172,10 @@ function createBill(form) {
     bill.date = Utilities.formatDate(new Date(), TZ, 'dd-MM-yyyy');
     bill.amountWords = amountInWords(bill.total);
     bill.shop = {
+      topLine: s['Top Line'], since: s['Since'],
       nameHi: s['Shop Name (Hindi)'], nameEn: s['Shop Name (English)'], tagline: s['Tagline'],
       address: s['Address'], phone: String(s['Phone'] || ''), gstin: String(s['GSTIN'] || ''),
-      terms: String(s['Terms'] || '').split('|').filter(String)
+      terms: String(s['Terms'] || '').split('|').filter(String).map(function (t) { return t.replace('{customer}', bill.customer.name); })
     };
 
     // Invoice HTML -> PDF -> Drive folder

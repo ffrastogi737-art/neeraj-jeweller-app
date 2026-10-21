@@ -38,7 +38,7 @@
 
   <h3>Items</h3>
   <table>
-    <thead><tr><th style="width:30%">Item Naam</th><th>Type</th><th>Weight (gm)</th><th>Rate / gm (₹)</th><th style="width:60px">Qty</th><th class="amt">Amount (₹)</th><th></th></tr></thead>
+    <thead><tr><th style="width:26%">Item Naam</th><th>Type</th><th style="width:70px">HSN</th><th>Weight (gm)</th><th>Rate / gm (₹)</th><th style="width:60px">Qty</th><th class="amt">Amount (₹)</th><th></th></tr></thead>
     <tbody id="items"></tbody>
   </table>
   <button class="gold" onclick="addItem()" style="margin-top:6px">+ Item Jodo</button>
@@ -81,6 +81,7 @@
     tr.innerHTML =
       '<td><input class="iname" placeholder="jaise: Gold Ring"></td>' +
       '<td><select class="itype"><option>Gold</option><option>Silver</option><option>Other</option></select></td>' +
+      '<td><input class="ihsn" value="7113"></td>' + // 7113 = gold/silver jewellery ka HSN code
       '<td><input class="iwt" type="number" step="0.001" min="0" oninput="calc()"></td>' +
       '<td><input class="irate" type="number" step="0.01" min="0" oninput="calc()"></td>' +
       '<td><input class="iqty" type="number" step="1" min="1" value="1" oninput="calc()"></td>' +
@@ -93,7 +94,7 @@
   function getItems() {
     return Array.prototype.map.call(document.querySelectorAll('#items tr'), function (tr) {
       return {
-        name: tr.querySelector('.iname').value, type: tr.querySelector('.itype').value,
+        name: tr.querySelector('.iname').value, type: tr.querySelector('.itype').value, hsn: tr.querySelector('.ihsn').value,
         weight: tr.querySelector('.iwt').value, rate: tr.querySelector('.irate').value, qty: tr.querySelector('.iqty').value
       };
     });

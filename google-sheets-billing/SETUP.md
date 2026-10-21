@@ -34,14 +34,14 @@ Aapko sirf 3 files copy-paste karni hain: `Code.gs`, `Form.html`, `Invoice.html`
 - Sheet wale tab pe jao aur page **refresh** karo (F5).
 - Upar menu bar mein **💎 Neeraj Jewellers** dikhna chahiye (5-10 second lag sakte hain).
 - Neeche do nayi tabs ban gayi hongi: **Settings** aur **Sales History**.
-- **Settings** tab kholo: shop ka naam, address `11, Arijit Prasad Marg, Dehradun`, GST rate 3 dikhega.
-  Phone `8923573805, 9536005642` bhara hoga. GSTIN abhi khaali hai, baad mein yahin bhar dena.
+- **Settings** tab kholo: shop ka naam, `जय शंकर जी`, `Since 1980`, address `11, Ajit Prasad Marg, Dehradun`,
+  Mob. `9536005642, 8923573805`, GSTIN `05ACKPR9481Q1ZI`, GST rate 3 dikhega.
 
 ## Step 4: Pehla bill banao
 
 1. **💎 Neeraj Jewellers → 🧾 Naya Bill**.
 2. Customer ka naam (zaroori), mobile (10 digit), address bharo.
-3. Item: naam, type (Gold/Silver/Other), weight (gm), rate per gm, qty.
+3. Item: naam, type (Gold/Silver/Other), HSN (pehle se `7113` bhara hai, jewellery ka code), weight (gm), rate per gm, qty.
    Aur item ke liye **+ Item Jodo**, hatane ke liye **✕**.
 4. GST chahiye to **☐ GST lagao** tick karo (rate 3% hai, badal bhi sakte ho).
 5. **Bill Banao ✓** dabao. 5-15 second lagenge.
@@ -82,13 +82,15 @@ Agar yahi dikhe to hisaab sahi hai.
 | Setting | Matlab |
 |---|---|
 | Shop Name (Hindi/English), Tagline, Address | Bill ke header mein chhapta hai |
-| Phone | Address ke saath dikhta hai (abhi: 8923573805, 9536005642) |
+| Top Line | Sabse upar beech mein (`जय शंकर जी`) |
+| Since | Logo ke neeche (`Since 1980`) |
+| Phone | Upar right mein "Mob." ke saath |
 | GSTIN | Sirf GST wale bill pe dikhega |
 | GST Rate (%) | Form mein default rate |
 | Invoice Prefix | `NJ-` ki jagah kuch aur chahiye to |
 | Next Invoice No | Agla bill kis number se bane. **Ise kam mat karna**, warna duplicate number banenge |
 | PDF Folder ID | Apne aap bharta hai, chhedo mat |
-| Terms | Terms & conditions. Har line ke beech `\|` lagao |
+| Terms | Terms & conditions. Har line ke beech `\|` lagao. `{customer}` ki jagah customer ka naam chhapta hai |
 
 ## Kuch dikkat aaye to
 

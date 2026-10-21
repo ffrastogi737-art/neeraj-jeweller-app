@@ -13,17 +13,24 @@
          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   table { border-collapse: collapse; width: 100%; }
 
-  /* shortcut: ~8 items ek A5 page mein aate hain; zyada hon to bill lamba hoke agle page pe jaata hai (kat-ta nahi) */
+  /* shortcut: ~7 items ek A5 page mein aate hain; zyada hon to bill lamba hoke agle page pe jaata hai (kat-ta nahi) */
   .page  { width: 148mm; min-height: 209mm; padding: 5mm; background: #fffaf0; margin: 0 auto; }
   .frame { border: 0.7mm solid #b08a3e; padding: 0.8mm; min-height: 199mm; }
   /* padding-bottom = neeche wale terms/signature/footer ki jagah, taaki items unke upar na chadhein */
-  .inner { border: 0.25mm solid #d6b46a; min-height: 195.9mm; padding: 3.5mm 5mm 30mm; position: relative; }
+  .inner { border: 0.25mm solid #d6b46a; min-height: 195.9mm; padding: 3.5mm 5mm 54mm; position: relative; }
 
-  /* Header: monogram + naam */
-  .mono { width: 12mm; height: 12mm; margin: 0 auto 1mm; border: 0.5mm double #b08a3e; border-radius: 50%;
-          background: #5a0f1d; color: #e9c979; text-align: center; line-height: 11mm;
-          font-family: 'Cinzel', Georgia, serif; font-size: 13pt; font-weight: 700; letter-spacing: 0.5pt; }
-  .hi   { text-align: center; font-family: 'Tiro Devanagari Hindi', serif; font-size: 18pt; color: #5a0f1d; line-height: 1.1; }
+  /* Header: upar GSTIN | jai shankar ji | mobile, phir monogram + naam */
+  .corner td { font-size: 7.5pt; color: #4a3426; vertical-align: top; padding: 0; width: 34%; }
+  .corner .top { width: auto; text-align: center; font-family: 'Tiro Devanagari Hindi', serif; font-size: 9pt; color: #5a0f1d; }
+  .corner .r { text-align: right; }
+  .mono { width: 11mm; height: 13mm; margin: 0 auto; border: 0.5mm double #b08a3e; border-radius: 50%;
+          background: #5a0f1d; color: #e9c979; text-align: center; padding-top: 1.6mm;
+          font-family: 'Cinzel', Georgia, serif; font-size: 12pt; font-weight: 700; line-height: 1; }
+  .mono span { display: block; font-size: 5pt; margin-bottom: 0.6mm; }
+  .since { text-align: center; font-family: 'Cinzel', Georgia, serif; font-size: 5.5pt; color: #9a7633; letter-spacing: 0.5pt; margin-top: 0.8mm; white-space: nowrap; }
+  .brand td { vertical-align: middle; padding: 0; }
+  .brand .side { width: 18mm; }
+  .hi   { text-align: center; font-family: 'Tiro Devanagari Hindi', serif; font-size: 17pt; color: #5a0f1d; line-height: 1.1; }
   .en   { text-align: center; font-family: 'Cinzel', Georgia, serif; font-size: 13pt; font-weight: 700; color: #5a0f1d; letter-spacing: 3pt; }
   .tag  { text-align: center; font-style: italic; font-size: 9.5pt; color: #9a7633; margin-top: 0.5mm; }
   .addr { text-align: center; font-size: 8.5pt; color: #4a3426; margin-top: 1mm; }
@@ -62,13 +69,13 @@
 
   /* Neeche: terms + signature + footer (page ke bottom pe chipka) */
   .bottom { position: absolute; left: 5mm; right: 5mm; bottom: 0; }
-  .terms td { vertical-align: bottom; padding: 0; }
-  .terms ol { margin: 0.8mm 0 0; padding-left: 3.5mm; font-size: 7.5pt; color: #4a3426; line-height: 1.35; }
-  .sign { text-align: center; font-size: 8pt; width: 42mm; }
-  .sign .for { font-family: 'Cinzel', Georgia, serif; font-size: 7pt; color: #5a0f1d; letter-spacing: 0.5pt; }
-  .sign .line { border-top: 0.25mm solid #2a1810; margin-top: 9mm; padding-top: 0.8mm; }
-  .thanks { margin-top: 2.5mm; margin-bottom: 2.5mm; border-top: 0.3mm solid #b08a3e; padding-top: 1.8mm; text-align: center;
-            font-style: italic; font-size: 11pt; font-weight: 600; color: #5a0f1d; }
+  .terms { margin: 0.5mm 0 0; padding-left: 3mm; font-size: 5.9pt; color: #4a3426; line-height: 1.25; text-align: justify; }
+  .signs td { vertical-align: bottom; padding: 0; font-size: 8pt; text-align: center; width: 42mm; }
+  .signs .gap { width: auto; }
+  .signs .for { font-family: 'Cinzel', Georgia, serif; font-size: 7pt; color: #5a0f1d; letter-spacing: 0.5pt; }
+  .signs .line { border-top: 0.25mm solid #2a1810; margin-top: 6.5mm; padding-top: 0.6mm; }
+  .thanks { margin-top: 1.5mm; margin-bottom: 1.8mm; border-top: 0.3mm solid #b08a3e; padding-top: 1.2mm; text-align: center;
+            font-style: italic; font-size: 10pt; font-weight: 600; color: #5a0f1d; }
   .thanks span { color: #b08a3e; font-style: normal; font-size: 7pt; }
 </style>
 </head>
@@ -76,14 +83,24 @@
 <div class="page"><div class="frame"><div class="inner">
 
   <!-- Header -->
-  <div class="mono">NJ</div>
-  <div class="hi"><?= b.shop.nameHi ?></div>
-  <div class="en"><?= b.shop.nameEn ?></div>
-  <? if (b.shop.tagline) { ?><div class="tag">~ <?= b.shop.tagline ?> ~</div><? } ?>
-  <div class="addr">
-    <?= b.shop.address ?><? if (b.shop.phone) { ?> &nbsp;|&nbsp; Ph: <?= b.shop.phone ?><? } ?>
-    <? if (b.gst && b.shop.gstin) { ?><br><b>GSTIN: <?= b.shop.gstin ?></b><? } ?>
-  </div>
+  <table class="corner"><tr>
+    <td><? if (b.gst && b.shop.gstin) { ?>GSTIN: <b><?= b.shop.gstin ?></b><? } ?></td>
+    <td class="top"><? if (b.shop.topLine) { ?>॥ <?= b.shop.topLine ?> ॥<? } ?></td>
+    <td class="r"><? if (b.shop.phone) { ?>Mob. <b><?= b.shop.phone ?></b><? } ?></td>
+  </tr></table>
+  <table class="brand" style="margin-top:1.5mm"><tr>
+    <td class="side">
+      <div class="mono"><span>◆</span>NJ</div>
+      <? if (b.shop.since) { ?><div class="since"><?= b.shop.since ?></div><? } ?>
+    </td>
+    <td>
+      <div class="hi"><?= b.shop.nameHi ?></div>
+      <div class="en"><?= b.shop.nameEn ?></div>
+      <? if (b.shop.tagline) { ?><div class="tag">~ <?= b.shop.tagline ?> ~</div><? } ?>
+      <div class="addr"><?= b.shop.address ?></div>
+    </td>
+    <td class="side"></td>
+  </tr></table>
   <table class="orn" style="margin:2mm 0"><tr><td class="line"></td><td class="dia">◆</td><td class="line"></td></tr></table>
 
   <!-- Invoice no / title / date -->
@@ -96,18 +113,15 @@
   <!-- Customer -->
   <table class="cust">
     <tr>
-      <td style="width:62%"><div class="lbl">BILLED TO</div><b style="font-size:10.5pt"><?= b.customer.name ?></b></td>
+      <td style="width:68%"><div class="lbl">BILLED TO</div><b style="font-size:10pt"><?= b.customer.name ?></b><? if (b.customer.address) { ?>, <?= b.customer.address ?><? } ?></td>
       <td><div class="lbl">MOBILE</div><?= b.customer.mobile || '—' ?></td>
     </tr>
-    <? if (b.customer.address) { ?>
-    <tr><td colspan="2" style="padding-top:0"><div class="lbl">ADDRESS</div><?= b.customer.address ?></td></tr>
-    <? } ?>
   </table>
 
   <!-- Items -->
   <table class="items">
     <thead><tr>
-      <th class="c" style="width:6mm">#</th><th>Item</th><th>Type</th>
+      <th class="c" style="width:6mm">#</th><th>Item</th><th>Type</th><th class="c">HSN</th>
       <th class="num">Wt (gm)</th><th class="num">Rate/gm</th><th class="c">Qty</th><th class="num">Amount (₹)</th>
     </tr></thead>
     <tbody>
@@ -116,6 +130,7 @@
         <td class="c"><?= i + 1 ?></td>
         <td><b><?= it.name ?></b></td>
         <td><?= it.type ?></td>
+        <td class="c"><?= it.hsn ?></td>
         <td class="num"><?= it.weight.toFixed(3) ?></td>
         <td class="num"><?= inr(it.rate) ?></td>
         <td class="c"><?= it.qty ?></td>
@@ -145,15 +160,12 @@
 
   <!-- Terms + signature + thank you -->
   <div class="bottom">
-    <table class="terms"><tr>
-      <td>
-        <div class="lbl">TERMS &amp; CONDITIONS</div>
-        <ol><? b.shop.terms.forEach(function (t) { ?><li><?= t ?></li><? }); ?></ol>
-      </td>
-      <td class="sign">
-        <div class="for">For <?= b.shop.nameEn ?></div>
-        <div class="line">Authorised Signatory</div>
-      </td>
+    <div class="lbl">TERMS &amp; CONDITIONS</div>
+    <ol class="terms"><? b.shop.terms.forEach(function (t) { ?><li><?= t ?></li><? }); ?></ol>
+    <table class="signs"><tr>
+      <td><div class="line">Customer's Signature</div></td>
+      <td class="gap"></td>
+      <td><div class="for">For <?= b.shop.nameEn ?></div><div class="line">Authorised Signatory</div></td>
     </tr></table>
     <div class="thanks"><span>◆</span> &nbsp;Thank you, visit again&nbsp; <span>◆</span></div>
   </div>
