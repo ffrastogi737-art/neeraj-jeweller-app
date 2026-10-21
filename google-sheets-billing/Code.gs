@@ -15,7 +15,7 @@ var DEFAULT_SETTINGS = [
   ['Shop Name (English)', 'NEERAJ JEWELLERS'],
   ['Tagline', 'Gold & Silver Jewellery'],
   ['Address', '11, Arijit Prasad Marg, Dehradun'],
-  ['Phone', ''],
+  ['Phone', '8923573805, 9536005642'],
   ['GSTIN', ''],
   ['GST Rate (%)', 3],
   ['Invoice Prefix', 'NJ-'],

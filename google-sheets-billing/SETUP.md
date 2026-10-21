@@ -35,7 +35,7 @@ Aapko sirf 3 files copy-paste karni hain: `Code.gs`, `Form.html`, `Invoice.html`
 - Upar menu bar mein **💎 Neeraj Jewellers** dikhna chahiye (5-10 second lag sakte hain).
 - Neeche do nayi tabs ban gayi hongi: **Settings** aur **Sales History**.
 - **Settings** tab kholo: shop ka naam, address `11, Arijit Prasad Marg, Dehradun`, GST rate 3 dikhega.
-  Phone aur GSTIN abhi khaali hain, baad mein yahin bhar dena.
+  Phone `8923573805, 9536005642` bhara hoga. GSTIN abhi khaali hai, baad mein yahin bhar dena.
 
 ## Step 4: Pehla bill banao
 
@@ -82,7 +82,7 @@ Agar yahi dikhe to hisaab sahi hai.
 | Setting | Matlab |
 |---|---|
 | Shop Name (Hindi/English), Tagline, Address | Bill ke header mein chhapta hai |
-| Phone | Bhar doge to address ke saath dikhega |
+| Phone | Address ke saath dikhta hai (abhi: 8923573805, 9536005642) |
 | GSTIN | Sirf GST wale bill pe dikhega |
 | GST Rate (%) | Form mein default rate |
 | Invoice Prefix | `NJ-` ki jagah kuch aur chahiye to |
