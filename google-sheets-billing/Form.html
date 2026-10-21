@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 12px 16px; color: #2a1810; background: #fffaf0; font-size: 13px; }
+  h3 { color: #5a0f1d; margin: 12px 0 6px; font-size: 14px; border-bottom: 1px solid #d6b46a; padding-bottom: 3px; }
+  label { font-size: 12px; color: #6b4f3a; }
+  input, select { padding: 6px; border: 1px solid #cbb38a; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box; }
+  input[type=checkbox] { width: auto; }
+  .row { display: flex; gap: 10px; margin-bottom: 6px; }
+  .row > div { flex: 1; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #5a0f1d; color: #f3dfa8; padding: 6px; font-size: 12px; text-align: left; }
+  td { padding: 3px; }
+  .amt { text-align: right; white-space: nowrap; font-weight: bold; }
+  button { padding: 8px 14px; border: 0; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  .gold { background: #b08a3e; color: #fff; }
+  .main { background: #5a0f1d; color: #f3dfa8; font-size: 15px; padding: 10px 24px; }
+  .del { background: #eee; color: #900; padding: 6px 9px; }
+  .bottom { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px; }
+  .totals td { padding: 3px 8px; }
+  .totals .grand td { font-size: 16px; font-weight: bold; color: #5a0f1d; border-top: 2px solid #b08a3e; }
+  #msg { color: #b00020; margin: 8px 0; font-weight: bold; }
+  #doneBox { text-align: center; padding-top: 60px; }
+  #doneBox a, #doneBox button { display: inline-block; margin: 6px; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div id="formBox">
+  <h3>Customer Details</h3>
+  <div class="row">
+    <div><label>Naam *</label><input id="name"></div>
+    <div><label>Mobile</label><input id="mobile" maxlength="10" inputmode="numeric"></div>
+  </div>
+  <div class="row"><div><label>Address</label><input id="address"></div></div>
+
+  <h3>Items</h3>
+  <table>
+    <thead><tr><th style="width:30%">Item Naam</th><th>Type</th><th>Weight (gm)</th><th>Rate / gm (₹)</th><th style="width:60px">Qty</th><th class="amt">Amount (₹)</th><th></th></tr></thead>
+    <tbody id="items"></tbody>
+  </table>
+  <button class="gold" onclick="addItem()" style="margin-top:6px">+ Item Jodo</button>
+
+  <div class="bottom">
+    <div>
+      <label style="font-size:14px;color:#2a1810"><input type="checkbox" id="gst" onchange="calc()"> <b>GST lagao</b></label>
+      <span id="gstBox" style="display:none"> &nbsp; Rate: <input id="gstRate" type="number" step="0.01" value="<?= gstRate ?>" oninput="calc()" style="width:70px"> %</span>
+    </div>
+    <table class="totals" style="width:auto">
+      <tr><td>Subtotal</td><td class="amt" id="tSub">0.00</td></tr>
+      <tr class="gstRow"><td>GST</td><td class="amt" id="tGst">0.00</td></tr>
+      <tr><td>Round Off</td><td class="amt" id="tRound">0.00</td></tr>
+      <tr class="grand"><td>Total ₹</td><td class="amt" id="tTotal">0</td></tr>
+    </table>
+  </div>
+
+  <div id="msg"></div>
+  <div style="text-align:right"><button id="saveBtn" class="main" onclick="save()">Bill Banao ✓</button></div>
+</div>
+
+<div id="doneBox" style="display:none">
+  <h2 style="color:#5a0f1d">✅ Bill ban gaya!</h2>
+  <p style="font-size:16px">Invoice: <b id="dNo"></b> &nbsp; | &nbsp; Total: <b>₹ <span id="dTotal"></span></b></p>
+  <a id="dPdf" class="main" style="padding:10px 18px;border-radius:4px" target="_blank">📄 PDF Kholo</a>
+  <button class="gold" onclick="printBill()">🖨️ Print</button>
+  <button class="gold" onclick="newBill()">➕ Naya Bill</button>
+  <button class="del" onclick="google.script.host.close()">Band Karo</button>
+  <p style="color:#6b4f3a">PDF Google Drive ke "Neeraj Jewellers Invoices" folder mein save ho gaya hai.</p>
+</div>
+
+<script>
+  var lastHtml = '';
+
+  function r2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+
+  // Nayi item row jodo
+  function addItem() {
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><input class="iname" placeholder="jaise: Gold Ring"></td>' +
+      '<td><select class="itype"><option>Gold</option><option>Silver</option><option>Other</option></select></td>' +
+      '<td><input class="iwt" type="number" step="0.001" min="0" oninput="calc()"></td>' +
+      '<td><input class="irate" type="number" step="0.01" min="0" oninput="calc()"></td>' +
+      '<td><input class="iqty" type="number" step="1" min="1" value="1" oninput="calc()"></td>' +
+      '<td class="amt">0.00</td>' +
+      '<td><button class="del" onclick="this.closest(\'tr\').remove(); calc()">✕</button></td>';
+    document.getElementById('items').appendChild(tr);
+  }
+
+  // Form se saare items padho
+  function getItems() {
+    return Array.prototype.map.call(document.querySelectorAll('#items tr'), function (tr) {
+      return {
+        name: tr.querySelector('.iname').value, type: tr.querySelector('.itype').value,
+        weight: tr.querySelector('.iwt').value, rate: tr.querySelector('.irate').value, qty: tr.querySelector('.iqty').value
+      };
+    });
+  }
+
+  // Live hisaab (sirf dikhane ke liye; asli hisaab server pe dobara hota hai)
+  function calc() {
+    var gstOn = document.getElementById('gst').checked;
+    document.getElementById('gstBox').style.display = gstOn ? 'inline' : 'none';
+    document.querySelector('.gstRow').style.display = gstOn ? '' : 'none';
+    var sub = 0;
+    document.querySelectorAll('#items tr').forEach(function (tr) {
+      var amt = r2((Number(tr.querySelector('.iwt').value) || 0) * (Number(tr.querySelector('.irate').value) || 0) * (Number(tr.querySelector('.iqty').value) || 0));
+      tr.querySelector('.amt').textContent = amt.toFixed(2);
+      sub += amt;
+    });
+    sub = r2(sub);
+    var gst = gstOn ? r2(sub * (Number(document.getElementById('gstRate').value) || 0) / 100) : 0;
+    var raw = r2(sub + gst), total = Math.round(raw);
+    document.getElementById('tSub').textContent = sub.toFixed(2);
+    document.getElementById('tGst').textContent = gst.toFixed(2);
+    document.getElementById('tRound').textContent = r2(total - raw).toFixed(2);
+    document.getElementById('tTotal').textContent = total;
+  }
+
+  // "Bill Banao": data server (Code.gs ka createBill) ko bhejo
+  function save() {
+    var btn = document.getElementById('saveBtn');
+    document.getElementById('msg').textContent = '';
+    btn.disabled = true; btn.textContent = 'Ban raha hai... ⏳';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        lastHtml = res.html;
+        document.getElementById('dNo').textContent = res.invoiceNo;
+        document.getElementById('dTotal').textContent = res.total;
+        document.getElementById('dPdf').href = res.pdfUrl;
+        document.getElementById('formBox').style.display = 'none';
+        document.getElementById('doneBox').style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Bill Banao ✓';
+      })
+      .withFailureHandler(function (err) {
+        document.getElementById('msg').textContent = '⚠️ ' + err.message;
+        btn.disabled = false; btn.textContent = 'Bill Banao ✓';
+      })
+      .createBill({
+        name: document.getElementById('name').value, mobile: document.getElementById('mobile').value,
+        address: document.getElementById('address').value, items: getItems(),
+        gst: document.getElementById('gst').checked, gstRate: document.getElementById('gstRate').value
+      });
+  }
+
+  // Naye tab mein invoice khol ke print dialog (A5 page chuno)
+  function printBill() {
+    var w = window.open('', '_blank');
+    if (!w) { alert('Popup block ho gaya. "PDF Kholo" se kholke wahan print karo.'); return; }
+    w.document.write(lastHtml);
+    w.document.close();
+    setTimeout(function () { w.focus(); w.print(); }, 1200); // fonts load hone ka thoda wait
+  }
+
+  // Form khali karke naya bill
+  function newBill() {
+    ['name', 'mobile', 'address'].forEach(function (id) { document.getElementById(id).value = ''; });
+    document.getElementById('gst').checked = false;
+    document.getElementById('items').innerHTML = '';
+    addItem(); calc();
+    document.getElementById('doneBox').style.display = 'none';
+    document.getElementById('formBox').style.display = 'block';
+  }
+
+  addItem(); calc();
+</script>
+</body>
+</html>

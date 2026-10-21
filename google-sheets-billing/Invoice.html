@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title><?= b.invoiceNo ?></title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Tiro+Devanagari+Hindi&display=swap" rel="stylesheet">
+<style>
+  /* A5 page = 148mm x 210mm. Layout tables se banaya hai taaki PDF converter mein bhi sahi dikhe */
+  @page { size: 148mm 210mm; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif; font-size: 10pt; color: #2a1810;
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  table { border-collapse: collapse; width: 100%; }
+
+  /* shortcut: ~8 items ek A5 page mein aate hain; zyada hon to bill lamba hoke agle page pe jaata hai (kat-ta nahi) */
+  .page  { width: 148mm; min-height: 209mm; padding: 5mm; background: #fffaf0; margin: 0 auto; }
+  .frame { border: 0.7mm solid #b08a3e; padding: 0.8mm; min-height: 199mm; }
+  /* padding-bottom = neeche wale terms/signature/footer ki jagah, taaki items unke upar na chadhein */
+  .inner { border: 0.25mm solid #d6b46a; min-height: 195.9mm; padding: 3.5mm 5mm 30mm; position: relative; }
+
+  /* Header: monogram + naam */
+  .mono { width: 12mm; height: 12mm; margin: 0 auto 1mm; border: 0.5mm double #b08a3e; border-radius: 50%;
+          background: #5a0f1d; color: #e9c979; text-align: center; line-height: 11mm;
+          font-family: 'Cinzel', Georgia, serif; font-size: 13pt; font-weight: 700; letter-spacing: 0.5pt; }
+  .hi   { text-align: center; font-family: 'Tiro Devanagari Hindi', serif; font-size: 18pt; color: #5a0f1d; line-height: 1.1; }
+  .en   { text-align: center; font-family: 'Cinzel', Georgia, serif; font-size: 13pt; font-weight: 700; color: #5a0f1d; letter-spacing: 3pt; }
+  .tag  { text-align: center; font-style: italic; font-size: 9.5pt; color: #9a7633; margin-top: 0.5mm; }
+  .addr { text-align: center; font-size: 8.5pt; color: #4a3426; margin-top: 1mm; }
+  .orn td { padding: 0; }
+  .orn .line { border-top: 0.3mm solid #b08a3e; }
+  .orn .dia  { width: 6mm; text-align: center; color: #b08a3e; font-size: 7pt; line-height: 1; }
+
+  /* Maroon patti: invoice no, title, date */
+  .band td { background: #5a0f1d; color: #f3dfa8; padding: 1.6mm 2.5mm; font-size: 8.5pt; }
+  .band .title { text-align: center; font-family: 'Cinzel', Georgia, serif; font-size: 10pt; font-weight: 700; letter-spacing: 2pt; color: #e9c979; }
+  .band .r { text-align: right; }
+
+  /* Customer box */
+  .cust { border: 0.25mm solid #d6b46a; background: #fff; margin-top: 2mm; }
+  .cust td { padding: 1.2mm 2.5mm; font-size: 9pt; vertical-align: top; }
+  .lbl { font-family: 'Cinzel', Georgia, serif; font-size: 6.5pt; color: #9a7633; letter-spacing: 1pt; }
+
+  /* Items table */
+  .items { margin-top: 2mm; }
+  .items th { background: #5a0f1d; color: #e9c979; font-family: 'Cinzel', Georgia, serif; font-size: 6.5pt;
+              font-weight: 500; letter-spacing: 0.5pt; padding: 1.6mm 1.5mm; text-align: left; border-bottom: 0.5mm solid #b08a3e; }
+  .items td { padding: 0.9mm 1.5mm; font-size: 9pt; border-bottom: 0.2mm solid #eadcc0; }
+  .items tr.alt td { background: #f8eedb; }
+  .num { text-align: right !important; white-space: nowrap; }
+  .c   { text-align: center !important; }
+
+  /* Totals */
+  .sum { margin-top: 2mm; }
+  .sum > tbody > tr > td { vertical-align: top; padding: 0; }
+  .words { border: 0.25mm solid #d6b46a; background: #fff; padding: 1.8mm 2.5mm; margin-right: 3mm; }
+  .words .w { font-style: italic; font-weight: 600; font-size: 9.5pt; color: #5a0f1d; margin-top: 0.8mm; }
+  .tot { border: 0.5mm solid #b08a3e; }
+  .tot td { padding: 1mm 2.5mm; font-size: 9pt; white-space: nowrap; }
+  .tot .grand td { background: #5a0f1d; color: #e9c979; font-family: 'Cinzel', Georgia, serif; font-size: 10.5pt;
+                   font-weight: 700; padding: 1.8mm 2.5mm; }
+
+  /* Neeche: terms + signature + footer (page ke bottom pe chipka) */
+  .bottom { position: absolute; left: 5mm; right: 5mm; bottom: 0; }
+  .terms td { vertical-align: bottom; padding: 0; }
+  .terms ol { margin: 0.8mm 0 0; padding-left: 3.5mm; font-size: 7.5pt; color: #4a3426; line-height: 1.35; }
+  .sign { text-align: center; font-size: 8pt; width: 42mm; }
+  .sign .for { font-family: 'Cinzel', Georgia, serif; font-size: 7pt; color: #5a0f1d; letter-spacing: 0.5pt; }
+  .sign .line { border-top: 0.25mm solid #2a1810; margin-top: 9mm; padding-top: 0.8mm; }
+  .thanks { margin-top: 2.5mm; margin-bottom: 2.5mm; border-top: 0.3mm solid #b08a3e; padding-top: 1.8mm; text-align: center;
+            font-style: italic; font-size: 11pt; font-weight: 600; color: #5a0f1d; }
+  .thanks span { color: #b08a3e; font-style: normal; font-size: 7pt; }
+</style>
+</head>
+<body>
+<div class="page"><div class="frame"><div class="inner">
+
+  <!-- Header -->
+  <div class="mono">NJ</div>
+  <div class="hi"><?= b.shop.nameHi ?></div>
+  <div class="en"><?= b.shop.nameEn ?></div>
+  <? if (b.shop.tagline) { ?><div class="tag">~ <?= b.shop.tagline ?> ~</div><? } ?>
+  <div class="addr">
+    <?= b.shop.address ?><? if (b.shop.phone) { ?> &nbsp;|&nbsp; Ph: <?= b.shop.phone ?><? } ?>
+    <? if (b.gst && b.shop.gstin) { ?><br><b>GSTIN: <?= b.shop.gstin ?></b><? } ?>
+  </div>
+  <table class="orn" style="margin:2mm 0"><tr><td class="line"></td><td class="dia">◆</td><td class="line"></td></tr></table>
+
+  <!-- Invoice no / title / date -->
+  <table class="band"><tr>
+    <td style="width:33%">Invoice No: <b><?= b.invoiceNo ?></b></td>
+    <td class="title"><?= b.gst ? 'TAX INVOICE' : 'INVOICE' ?></td>
+    <td class="r" style="width:33%">Date: <b><?= b.date ?></b></td>
+  </tr></table>
+
+  <!-- Customer -->
+  <table class="cust">
+    <tr>
+      <td style="width:62%"><div class="lbl">BILLED TO</div><b style="font-size:10.5pt"><?= b.customer.name ?></b></td>
+      <td><div class="lbl">MOBILE</div><?= b.customer.mobile || '—' ?></td>
+    </tr>
+    <? if (b.customer.address) { ?>
+    <tr><td colspan="2" style="padding-top:0"><div class="lbl">ADDRESS</div><?= b.customer.address ?></td></tr>
+    <? } ?>
+  </table>
+
+  <!-- Items -->
+  <table class="items">
+    <thead><tr>
+      <th class="c" style="width:6mm">#</th><th>Item</th><th>Type</th>
+      <th class="num">Wt (gm)</th><th class="num">Rate/gm</th><th class="c">Qty</th><th class="num">Amount (₹)</th>
+    </tr></thead>
+    <tbody>
+    <? for (var i = 0; i < b.items.length; i++) { var it = b.items[i]; ?>
+      <tr class="<?= i % 2 ? 'alt' : '' ?>">
+        <td class="c"><?= i + 1 ?></td>
+        <td><b><?= it.name ?></b></td>
+        <td><?= it.type ?></td>
+        <td class="num"><?= it.weight.toFixed(3) ?></td>
+        <td class="num"><?= inr(it.rate) ?></td>
+        <td class="c"><?= it.qty ?></td>
+        <td class="num"><b><?= inr(it.amount) ?></b></td>
+      </tr>
+    <? } ?>
+    </tbody>
+  </table>
+
+  <!-- Amount in words + total box -->
+  <table class="sum"><tr>
+    <td>
+      <div class="words"><div class="lbl">AMOUNT IN WORDS</div><div class="w"><?= b.amountWords ?></div></div>
+    </td>
+    <td style="width:50mm">
+      <table class="tot">
+        <tr><td>Subtotal</td><td class="num"><?= inr(b.subtotal) ?></td></tr>
+        <? if (b.gst) { ?>
+        <tr><td>CGST @ <?= b.gstRate / 2 ?>%</td><td class="num"><?= inr(b.cgst) ?></td></tr>
+        <tr><td>SGST @ <?= b.gstRate / 2 ?>%</td><td class="num"><?= inr(b.sgst) ?></td></tr>
+        <? } ?>
+        <tr><td>Round Off</td><td class="num"><?= inr(b.roundOff) ?></td></tr>
+        <tr class="grand"><td>TOTAL</td><td class="num">₹ <?= inr(b.total) ?></td></tr>
+      </table>
+    </td>
+  </tr></table>
+
+  <!-- Terms + signature + thank you -->
+  <div class="bottom">
+    <table class="terms"><tr>
+      <td>
+        <div class="lbl">TERMS &amp; CONDITIONS</div>
+        <ol><? b.shop.terms.forEach(function (t) { ?><li><?= t ?></li><? }); ?></ol>
+      </td>
+      <td class="sign">
+        <div class="for">For <?= b.shop.nameEn ?></div>
+        <div class="line">Authorised Signatory</div>
+      </td>
+    </tr></table>
+    <div class="thanks"><span>◆</span> &nbsp;Thank you, visit again&nbsp; <span>◆</span></div>
+  </div>
+
+</div></div></div>
+</body>
+</html>
